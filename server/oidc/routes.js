@@ -155,7 +155,7 @@ export default (provider) => {
 
     if (isValid) {
       console.log(ctx.oidc)
-      const result = { login: { ...ctx.oidc.result.login }, totp: { verified: true, enrolled: true } };
+      const result = { login: { accountId }, totp: { verified: true, enrolled: true } };
       return provider.interactionFinished(ctx.req, ctx.res, result, {
         mergeWithLastSubmission: true,
       });
