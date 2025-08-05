@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Erreur</title>
+</head>
+<body>
+  <h1>Erreur</h1>
+  <p><%= error.message %></p>
+  <p><%= error.error_description %></p>
+  <% if (locals.error_description) { %>
+    <p><%= error_description %></p>
+  <% } %>
+</body>
+</html>

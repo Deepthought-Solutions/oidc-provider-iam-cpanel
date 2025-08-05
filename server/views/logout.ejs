@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Déconnexion</title>
+</head>
+<body>
+  <h1>Déconnexion</h1>
+  <p>Êtes-vous sûr de vouloir vous déconnecter ?</p>
+  <form action="/session/end" method="post">
+    <input type="hidden" name="xsrf" value="<%= xsrf %>">
+    <button type="submit">Oui</button>
+  </form>
+</body>
+</html>

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title><%= title %></title>
+</head>
+<body>
+  <h1><%= title %></h1>
+  <p>Enter the code from your authenticator app.</p>
+
+  <% if (locals.error) { %>
+    <p style="color: red;"><%= error %></p>
+  <% } %>
+
+  <form action="/interaction/<%= uid %>/totp/verify" method="post">
+    <div>
+      <label for="token">Authentication Code</label>
+      <input type="text" name="token" id="token" required autocomplete="off" inputmode="numeric" pattern="[0-9]*">
+    </div>
+    <button type="submit">Verify</button>
+  </form>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Consentement</title>
+</head>
+<body>
+  <h1>Consentement</h1>
+  <p>L'application <%= client.client_name %> demande l'accès à votre compte.</p>
+  
+  <form action="/interaction/<%= uid %>/confirm" method="post">
+    <p>Scopes demandés:</p>
+    <ul>
+      <% for (const scope of prompt.details.missingOIDCScope) { %>
+        <li><input type="checkbox" name="scope" value="<%= scope %>" checked disabled> <%= scope %></li>
+      <% } %>
+    </ul>
+    <button type="submit">Accepter</button>
+  </form>
+  <a href="/interaction/<%= uid %>/abort">Refuser</a>
+</body>
+</html>

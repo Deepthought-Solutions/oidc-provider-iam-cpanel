@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title><%= title %></title>
+</head>
+<body>
+  <h1><%= title %></h1>
+  <p>Scan the QR code with your authenticator app, then enter the code below.</p>
+  <p>Recommanded app : FreeOTP <a href="https://apps.apple.com/us/app/freeotp-authenticator/id872559395">Apple Store</a></p>
+  <div>
+    <img src="<%= qrCodeDataUri %>">
+  </div>
+
+  <% if (locals.error) { %>
+    <p style="color: red;"><%= error %></p>
+  <% } %>
+
+  <form action="/interaction/<%= uid %>/totp/enroll" method="post">
+    <div>
+      <label for="token">Authentication Code</label>
+      <input type="text" name="token" id="token" required autocomplete="off" inputmode="numeric" pattern="[0-9]*">
+    </div>
+    <button type="submit">Verify</button>
+  </form>
+</body>
+</html>
