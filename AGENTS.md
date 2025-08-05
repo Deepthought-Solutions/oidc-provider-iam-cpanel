@@ -25,7 +25,7 @@ This wrapper uses a dynamic `import()` statement, which is a promise-based funct
 
 ### Key Takeaways
 
-- **Do not change the startup file** in `deployment/deploy_auth.sh` from `server/passenger-loader.js`.
+- **Do not change the startup file** `server/passenger-loader.js`.
 - The main application logic should remain in `server/server.mjs`.
 - The `passenger-loader.js` file should not be modified unless there is a fundamental change in the deployment environment or Node.js module handling.
 - If you encounter module-related errors during deployment, verify that the interaction between `passenger-loader.js` and `server.mjs` is still valid.
