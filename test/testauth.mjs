@@ -39,7 +39,7 @@ async function provisionClient() {
     createdAt: Sequelize.NOW,
     updatedAt: Sequelize.NOW
   });
-  await sequelize.close();
+
 }
 
 router.get('/login', async (ctx) => {
