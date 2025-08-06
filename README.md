@@ -11,3 +11,9 @@ This implementation is based on the https://github.com/panva/node-oidc-provider 
 
 Some additional features to come.
 
+
+## Run the testsuite
+
+```bash
+DEBUG=pw:webserver npx playwright test
+```

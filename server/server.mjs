@@ -27,105 +27,109 @@ if (typeof(PhusionPassenger) !== 'undefined') {
 import { dirname } from 'desm';
 const __dirname = dirname(import.meta.url);
 
-startServer();
+// startServer();
 
-async function startServer() {
-  console.log(`Starting server in ${process.env.NODE_ENV} mode.`);
-  if (process.env.NODE_ENV !== 'test') {
-    console.log('Checking for database migrations...');
-    const queryInterface = sequelize.getQueryInterface();
-    const migrationsDir = path.join(__dirname, '..', 'migrations');
+export function startServer() {
+  return new Promise(async (resolve, reject) => {
+    console.log(`Starting server in ${process.env.NODE_ENV} mode.`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('Checking for database migrations...');
+      const queryInterface = sequelize.getQueryInterface();
+      const migrationsDir = path.join(__dirname, '..', 'migrations');
 
-    try {
-      await queryInterface.createTable('SequelizeMeta', {
-        name: {
-          type: sequelize.constructor.STRING,
-          allowNull: false,
-          unique: true,
-          primaryKey: true,
-        },
-      });
-      console.log('Created SequelizeMeta table.');
-    } catch (e) {
-      // Fails silently if the table already exists.
-    }
-
-    const executed = await sequelize.query(
-      'SELECT name FROM "SequelizeMeta"',
-      { type: sequelize.QueryTypes.SELECT }
-    ).catch(() => []);
-    const executedMigrationNames = executed.map((m) => m.name);
-    console.log('Executed migrations:', executedMigrationNames);
-
-    const migrationFiles = fs.readdirSync(migrationsDir)
-      .filter((file) => file.endsWith('.js'))
-      .sort();
-
-    for (const file of migrationFiles) {
-      if (!executedMigrationNames.includes(file)) {
-        console.log(`Running migration ${file}`);
-        const migrationPath = path.join(migrationsDir, file);
-        const { href } = new URL(`file://${migrationPath}`);
-        const { default: migration } = await import(href);
-
-        await migration.up(queryInterface, sequelize.constructor);
-        await queryInterface.bulkInsert('SequelizeMeta', [{ name: file }]);
-        console.log(`Migration ${file} executed successfully.`);
+      try {
+        await queryInterface.createTable('SequelizeMeta', {
+          name: {
+            type: sequelize.constructor.STRING,
+            allowNull: false,
+            unique: true,
+            primaryKey: true,
+          },
+        });
+        console.log('Created SequelizeMeta table.');
+      } catch (e) {
+        // Fails silently if the table already exists.
       }
+
+      const executed = await sequelize.query(
+        'SELECT name FROM "SequelizeMeta"',
+        { type: sequelize.QueryTypes.SELECT }
+      ).catch(() => []);
+      const executedMigrationNames = executed.map((m) => m.name);
+      console.log('Executed migrations:', executedMigrationNames);
+
+      const migrationFiles = fs.readdirSync(migrationsDir)
+        .filter((file) => file.endsWith('.js'))
+        .sort();
+
+      for (const file of migrationFiles) {
+        if (!executedMigrationNames.includes(file)) {
+          console.log(`Running migration ${file}`);
+          const migrationPath = path.join(migrationsDir, file);
+          const { href } = new URL(`file://${migrationPath}`);
+          const { default: migration } = await import(href);
+
+          await migration.up(queryInterface, sequelize.constructor);
+          await queryInterface.bulkInsert('SequelizeMeta', [{ name: file }]);
+          console.log(`Migration ${file} executed successfully.`);
+        }
+      }
+      console.log('Database migrations are up to date.');
     }
-    console.log('Database migrations are up to date.');
-  }
 
-  console.log(`starting issuer ${provider_uri}`)
-  const provider = new Provider(provider_uri, { ...configuration });
+    console.log(`starting issuer ${provider_uri}`)
+    const provider = new Provider(provider_uri, { ...configuration });
 
-  const directives = helmet.contentSecurityPolicy.getDefaultDirectives();
-  delete directives['form-action'];
-  const pHelmet = promisify(helmet({
-    contentSecurityPolicy: {
-      useDefaults: false,
-      directives,
-    },
-  }));
+    const directives = helmet.contentSecurityPolicy.getDefaultDirectives();
+    delete directives['form-action'];
+    const pHelmet = promisify(helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives,
+      },
+    }));
 
-  provider.use(async (ctx, next) => {
-    const origSecure = ctx.req.secure;
-    ctx.req.secure = ctx.request.secure;
-    await pHelmet(ctx.req, ctx.res);
-    ctx.req.secure = origSecure;
-    return next();
-  });
-
-  render(provider, {
-    cache: false,
-    viewExt: 'ejs',
-    layout: '_layout',
-    root: path.join(__dirname, 'views'),
-  });
-
-  if (process.env.NODE_ENV === 'production') {
-    provider.proxy = true;
     provider.use(async (ctx, next) => {
-      if (ctx.secure) {
-        await next();
-      } else if (ctx.method === 'GET' || ctx.method === 'HEAD') {
-        ctx.status = 303;
-        ctx.redirect(ctx.href.replace(/^http:\/\//i, 'https://'));
-      } else {
-        ctx.body = {
-          error: 'invalid_request',
-          error_description: 'do yourself a favor and only use https',
-        };
-        ctx.status = 400;
-      }
+      const origSecure = ctx.req.secure;
+      ctx.req.secure = ctx.request.secure;
+      await pHelmet(ctx.req, ctx.res);
+      ctx.req.secure = origSecure;
+      return next();
     });
-  }
 
-  provider.use(routes(provider).routes());
-  const server = provider.listen(port, () => {
-    console.log(`OIDC IdP is listening on port ${port}, check its /.well-known/openid-configuration`);
-    if (process.env.NODE_ENV === 'test') {
-      console.log('OIDC provider is ready for testing.');
+    render(provider, {
+      cache: false,
+      viewExt: 'ejs',
+      layout: '_layout',
+      root: path.join(__dirname, 'views'),
+    });
+
+    if (process.env.NODE_ENV === 'production') {
+      provider.proxy = true;
+      provider.use(async (ctx, next) => {
+        if (ctx.secure) {
+          await next();
+        } else if (ctx.method === 'GET' || ctx.method === 'HEAD') {
+          ctx.status = 303;
+          ctx.redirect(ctx.href.replace(/^http:\/\//i, 'https://'));
+        } else {
+          ctx.body = {
+            error: 'invalid_request',
+            error_description: 'do yourself a favor and only use https',
+          };
+          ctx.status = 400;
+        }
+      });
     }
-  });
+
+    provider.use(routes(provider).routes());
+    const server = provider.listen(port, () => {
+      console.log(`OIDC IdP is listening on port ${port}, check its /.well-known/openid-configuration`);
+      if (process.env.NODE_ENV === 'test') {
+        console.log('OIDC provider is ready for testing.');
+      }
+      resolve()
+    });
+  })
+
 };

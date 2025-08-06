@@ -1,7 +1,6 @@
 import Koa from 'koa';
 import Router from '@koa/router';
-import openid from 'openid-client';
-const { Issuer, generators } = openid;
+import * as openid from 'openid-client'
 import { v4 as uuidv4 } from 'uuid';
 import { Sequelize } from 'sequelize';
 
@@ -42,7 +41,7 @@ async function provisionClient() {
 }
 
 router.get('/login', async (ctx) => {
-  const issuer = await Issuer.discover(providerIssuer);
+  const issuer = await openid.Issuer.discover(providerIssuer);
   const oidcClient = new issuer.Client(client);
   const url = oidcClient.authorizationUrl({
     scope: 'openid email profile',
@@ -53,7 +52,7 @@ router.get('/login', async (ctx) => {
 });
 
 router.get('/cb', async (ctx) => {
-  const issuer = await Issuer.discover(providerIssuer);
+  const issuer = await openid.Issuer.discover(providerIssuer);
   const oidcClient = new issuer.Client(client);
   const params = oidcClient.callbackParams(ctx.req);
   const tokenSet = await oidcClient.callback(`${clientHost}/cb`, params, {
@@ -62,6 +61,12 @@ router.get('/cb', async (ctx) => {
   ctx.body = {
     message: 'Authentication successful',
     tokenSet,
+  };
+});
+
+router.get('/', async (ctx) => {
+  ctx.body = {
+    message: 'It works',
   };
 });
 
@@ -81,11 +86,10 @@ router.get('/mock-auth', async (ctx) => {
 
 app.use(router.routes());
 
-async function start() {
+export async function startTestClient() {
   await provisionClient();
   app.listen(port, () => {
     console.log(`Test client server listening on port ${port}`);
   });
 }
 
-start();

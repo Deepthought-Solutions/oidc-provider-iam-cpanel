@@ -6,4 +6,6 @@
 import('./server.mjs').catch(err => {
   console.error("Failed to load ES module server:", err);
   process.exit(1);
+}).then((server) => {
+  server.startServer()
 });
