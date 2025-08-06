@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 const env = process.env.NODE_ENV || 'development';
 const configPath = path.join(__dirname, '..', '..', 'config', 'config.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))[env];
-
+console.log(`db_adapters: sequelize env=${env}`)
 
 let sequelize;
 

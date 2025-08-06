@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default async function runMigrations() {
-  console.log('Running migrations...');
+  console.log('Running migrations for tests...');
   const queryInterface = sequelize.getQueryInterface();
   const migrationsDir = path.join(__dirname, '..', 'migrations');
 

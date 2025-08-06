@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import routes from './oidc/routes.js';
 import configuration from './oidc/configuration.js';
+import { getConfiguredClients } from './oidc/configuration.js';
 import { sequelize } from './oidc/db_adapter.js';
 import fs from 'node:fs';
 
@@ -83,6 +84,7 @@ export function startServer() {
       console.log('Database migrations are up to date.');
     }
 
+    configuration.clients = await getConfiguredClients()
     console.log(`starting issuer ${provider_uri}`)
     const provider = new Provider(provider_uri, { ...configuration });
 
