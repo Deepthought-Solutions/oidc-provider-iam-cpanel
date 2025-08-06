@@ -1,3 +1,4 @@
+import 'dotenv/config';
 // server/index.js
 console.log("Starting OIDC provider server")
 
@@ -10,6 +11,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import routes from './oidc/routes.js';
 import configuration from './oidc/configuration.js';
+import { getConfiguredClients } from './oidc/configuration.js';
 import { sequelize } from './oidc/db_adapter.js';
 import fs from 'node:fs';
 
@@ -31,6 +33,11 @@ const __dirname = dirname(import.meta.url);
 
 export function startServer() {
   return new Promise(async (resolve, reject) => {
+    setTimeout(() => {
+      console.log('Server startup timed out.');
+      reject(new Error('Server startup timed out.'));
+    }, 30000); // 30 seconds timeout
+
     console.log(`Starting server in ${process.env.NODE_ENV} mode.`);
     if (process.env.NODE_ENV !== 'test') {
       console.log('Checking for database migrations...');
@@ -77,6 +84,7 @@ export function startServer() {
       console.log('Database migrations are up to date.');
     }
 
+    configuration.clients = await getConfiguredClients()
     console.log(`starting issuer ${provider_uri}`)
     const provider = new Provider(provider_uri, { ...configuration });
 

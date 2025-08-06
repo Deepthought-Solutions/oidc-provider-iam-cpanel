@@ -3,6 +3,7 @@ import Router from '@koa/router';
 import * as openid from 'openid-client'
 import { v4 as uuidv4 } from 'uuid';
 import { Sequelize } from 'sequelize';
+import { sequelize } from '../server/oidc/db_adapter.js';
 
 const app = new Koa();
 const router = new Router();
@@ -23,10 +24,6 @@ const client = {
 };
 
 async function provisionClient() {
-  const sequelize = new Sequelize({
-    dialect: 'sqlite',
-    storage: 'test.db',
-  });
 
   const Client = sequelize.define('_oidc_Clients', {
     id: { type: Sequelize.STRING, primaryKey: true },
@@ -36,7 +33,12 @@ async function provisionClient() {
   });
 
   await sequelize.sync();
-  await Client.upsert({ id: client.client_id, data: client });
+  await Client.upsert({ 
+    id: client.client_id,
+    data: client,
+    createdAt: Sequelize.NOW,
+    updatedAt: Sequelize.NOW
+  });
   await sequelize.close();
 }
 
@@ -45,7 +47,7 @@ router.get('/login', async (ctx) => {
   const oidcClient = new issuer.Client(client);
   const url = oidcClient.authorizationUrl({
     scope: 'openid email profile',
-    code_challenge: generators.codeChallenge(generators.codeVerifier()),
+    code_challenge: openid.generators.codeChallenge(openid.generators.codeVerifier()),
     code_challenge_method: 'S256',
   });
   ctx.redirect(url);
@@ -56,7 +58,7 @@ router.get('/cb', async (ctx) => {
   const oidcClient = new issuer.Client(client);
   const params = oidcClient.callbackParams(ctx.req);
   const tokenSet = await oidcClient.callback(`${clientHost}/cb`, params, {
-    code_verifier: generators.codeVerifier(),
+    code_verifier: openid.generators.codeVerifier(),
   });
   ctx.body = {
     message: 'Authentication successful',

@@ -12,9 +12,8 @@ export default defineConfig({
       timeout: 120 * 1000,
       env: {
         // DEBUG: 'pw:webserver',
+        NODE_ENV: 'test',
         ISSUER_URL: 'http://localhost:3080'
       }
     }]
-
-  // globalSetup: './test/global-setup.mjs',
 });

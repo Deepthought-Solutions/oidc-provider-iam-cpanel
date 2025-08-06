@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import * as fs from 'fs';
 import runMigrations from './run-migrations.mjs';
 import { startServer } from '../server/server.mjs';
@@ -11,9 +12,9 @@ async function main() {
   await runMigrations();
 
   console.log('Starting OIDC provider...');
-  process.env.ISSUER_URL = 'http://localhost:3080/';
-  startServer().then(() => {
-    startTestClient()
+  // process.env.ISSUER_URL = 'http://localhost:3080/';
+  startTestClient().then(() => {
+    startServer()
   })
 }
 
