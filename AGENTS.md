@@ -69,3 +69,8 @@ export default {
 ```
 
 By following this process, you ensure that all database schema changes are tracked and applied systematically, avoiding the potential issues caused by `sequelize.sync()` in a production environment.
+
+## Global directives
+
+ - When preparing branch name and commit comment, review the whole changeset that will be comitted and compose a meaningful comment that relates the changes and the why. If the why is not clear enough, prompt the human for clarifications. Additionally, create an md file or update the relevant file in the doc/site-specs directory giving a detailed description of the change request. Prefix a feature branch with feat/ and a bugfix branch with fix/.
+ - Add of fix playwright tests with new use cases when necessary.
