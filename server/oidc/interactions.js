@@ -198,11 +198,11 @@ new Prompt(
       }
 
       // We also need to make sure the login was successful in the first place
-      // if (!oidc.result || !oidc.result.login) {
-      //   console.log(`oidc.result : ${oidc.result}`)
-      //   // console.log(`oidc.result.login : ${oidc.result.login}`)
-      //   return Check.NO_NEED_TO_PROMPT;
-      // }
+      if (!oidc.result || !oidc.result.login) {
+        console.log(`oidc.result : ${oidc.result}`)
+        // console.log(`oidc.result.login : ${oidc.result.login}`)
+        return Check.NO_NEED_TO_PROMPT;
+      }
 
       const accountHasTotp = await hasTotpSecret(oidc.session.accountId);
 
@@ -336,11 +336,13 @@ new Prompt(
   )
   ],
   url(ctx, interaction) {
+    const base = `/interaction/${interaction.uid}`;
+    const extra = new URLSearchParams(interaction.params);
     console.log(`interactions: generating interaction url for prompt ${interaction.prompt.name}`);
     if (interaction.prompt.name === 'totp') {
-      return `/interaction/${interaction.uid}/totp`;
+      return `${base}/totp?${extra}`;
     }
-    return `/interaction/${interaction.uid}?redirect_uri=${interaction.params.redirect_uri}`;
+    return `${base}?${extra}`;
   }
 }
 

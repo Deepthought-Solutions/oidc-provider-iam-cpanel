@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 const env = process.env.NODE_ENV || 'development';
 const configPath = path.join(__dirname, '..', '..', 'config', 'config.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))[env];
-
+console.log(`db_adapters: sequelize env=${env}`)
 
 let sequelize;
 
@@ -37,6 +37,11 @@ if (env === 'production') {
       dialect: 'postgres',
     },
   );
+} else if (env === 'test') {
+  sequelize = new Sequelize({
+    dialect: 'sqlite',
+    storage: 'test.db',
+  });
 } else {
   // For development, use the config directly, making sure the storage path is correct
   config.storage = path.join(__dirname, '..', '..', config.storage);
@@ -82,6 +87,8 @@ const models = [
     data: { type: Sequelize.JSON }, // use JSONB woth pgsql
     expiresAt: { type: Sequelize.DATE },
     consumedAt: { type: Sequelize.DATE },
+    createdAt: { type: Sequelize.DATE, allowNull: false },
+    updatedAt: { type: Sequelize.DATE, allowNull: false },
   }));
   return map;
 }, new Map());

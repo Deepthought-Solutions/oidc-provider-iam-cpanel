@@ -11,6 +11,18 @@ import { findAccount, renderError, postLogoutSuccessSource, logoutSource } from 
 import dotenv from 'dotenv'
 dotenv.config();
 
+export async function getConfiguredClients() {
+      const Client = sequelize.model('_oidc_Clients');
+      const clients = await Client.findAll({ where: { data: { [Sequelize.Op.ne]: null } } });
+      const result = clients.map(c => {
+        console.log(c)
+        return c.data
+      });
+      console.log(result)
+      return result
+    }
+
+
 const __dirname = dirname(import.meta.url);
 const jwksPath = path.join(__dirname, '..', '..', 'config', 'jwks.json');
 let jwks;
@@ -40,16 +52,7 @@ export default {
       //   depending on where the specific audiences are intended to be put in
       return "http://localhost:8000";
     },
-    clients: await async function() {
-      const Client = sequelize.model('_oidc_Clients');
-      const clients = await Client.findAll({ where: { data: { [Sequelize.Op.ne]: null } } });
-      const result = clients.map(c => {
-        console.log(c)
-        return c.data
-      });
-      console.log(result)
-      return result
-    }(),
+    clients: [],
     interactions: interactions,
     cookies: {
       keys: ['some secret key', 'and also the old rotated away some time ago', 'and one more'],

@@ -3,3 +3,4 @@ node_modules
 *.db
 config/jwks.json
 sendtest.ts
+test-results
