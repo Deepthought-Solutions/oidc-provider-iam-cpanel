@@ -87,6 +87,8 @@ const models = [
     data: { type: Sequelize.JSON }, // use JSONB woth pgsql
     expiresAt: { type: Sequelize.DATE },
     consumedAt: { type: Sequelize.DATE },
+    createdAt: { type: Sequelize.DATE, allowNull: false },
+    updatedAt: { type: Sequelize.DATE, allowNull: false },
   }));
   return map;
 }, new Map());
