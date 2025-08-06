@@ -27,16 +27,15 @@ test('enrollment flow', async ({ page }) => {
   await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
 
   // Fill in the login form
-  await page.fill('input[name="login"]', 'testuser');
-  await page.fill('input[name="password"]', 'password');
+  await page.fill('input[name="login"]', 'test');
+  await page.fill('input[name="password"]', 'test');
   await page.click('button[type="submit"]');
 
   // After login, we should be on the TOTP enrollment page
   await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*\/totp/);
 
   // Extract the TOTP secret from the QR code
-  const qrCodeDataUri = await page.locator('img').getAttribute('src');
-  const otpauthUri = Buffer.from(qrCodeDataUri.split(',')[1], 'base64').toString();
+  const otpauthUri = await page.locator('img').getAttribute('data-uri');
   const totp = OTPAuth.URI.parse(otpauthUri);
 
   // Fill in the TOTP form with a valid token
