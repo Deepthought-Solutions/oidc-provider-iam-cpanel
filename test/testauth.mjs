@@ -42,27 +42,45 @@ async function provisionClient() {
 
 }
 
+let code_verifier;
+
 router.get('/login', async (ctx) => {
-  const issuer = await openid.Issuer.discover(providerIssuer);
-  const oidcClient = new issuer.Client(client);
-  const url = oidcClient.authorizationUrl({
+  const config = await openid.discovery(
+    new URL(providerIssuer),
+    client.client_id,
+    client.client_secret,
+    undefined,
+    {
+      execute: [openid.allowInsecureRequests],
+    }
+  );
+  code_verifier = openid.randomPKCECodeVerifier();
+  const code_challenge = await openid.calculatePKCECodeChallenge(code_verifier);
+  const url = openid.buildAuthorizationUrl(config, {
     scope: 'openid email profile',
-    code_challenge: openid.generators.codeChallenge(openid.generators.codeVerifier()),
+    code_challenge,
     code_challenge_method: 'S256',
+    redirect_uri: client.redirect_uris[0],
   });
   ctx.redirect(url);
 });
 
 router.get('/cb', async (ctx) => {
-  const issuer = await openid.Issuer.discover(providerIssuer);
-  const oidcClient = new issuer.Client(client);
-  const params = oidcClient.callbackParams(ctx.req);
-  const tokenSet = await oidcClient.callback(`${clientHost}/cb`, params, {
-    code_verifier: openid.generators.codeVerifier(),
+  const config = await openid.discovery(
+    new URL(providerIssuer),
+    client.client_id,
+    client.client_secret,
+    undefined,
+    {
+      execute: [openid.allowInsecureRequests],
+    }
+  );
+  const tokens = await openid.authorizationCodeGrant(config, new URL(ctx.href), {
+    pkceCodeVerifier: code_verifier,
   });
   ctx.body = {
     message: 'Authentication successful',
-    tokenSet,
+    tokenSet: tokens,
   };
 });
 

@@ -116,6 +116,7 @@ export default (provider) => {
         params,
         title: 'Setup Two-Factor Authentication',
         qrCodeDataUri,
+        uri,
         error: null,
         session: session ? debug(session) : undefined,
         dbg: {
