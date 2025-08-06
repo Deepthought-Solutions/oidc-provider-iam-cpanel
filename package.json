@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "npm run server:dev",
     "server": "node --loader ts-node/esm ./server/server.mjs",
-    "server:dev": "npm run server"
+    "server:dev": "npm run server",
+    "test": "cross-env NODE_ENV=test node test/run.mjs"
   },
   "dependencies": {
     "@koa/ejs": "^5.1.0",
@@ -30,6 +31,8 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.42.1",
+    "cross-env": "^7.0.3",
     "ts-node": "^10.9.2"
   }
 }

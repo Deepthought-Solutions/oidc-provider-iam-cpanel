@@ -37,6 +37,11 @@ if (env === 'production') {
       dialect: 'postgres',
     },
   );
+} else if (env === 'test') {
+  sequelize = new Sequelize({
+    dialect: 'sqlite',
+    storage: 'test.db',
+  });
 } else {
   // For development, use the config directly, making sure the storage path is correct
   config.storage = path.join(__dirname, '..', '..', config.storage);

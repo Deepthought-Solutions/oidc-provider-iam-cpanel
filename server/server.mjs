@@ -30,48 +30,51 @@ const __dirname = dirname(import.meta.url);
 startServer();
 
 async function startServer() {
-  console.log('Checking for database migrations...');
-  const queryInterface = sequelize.getQueryInterface();
-  const migrationsDir = path.join(__dirname, '..', 'migrations');
+  console.log(`Starting server in ${process.env.NODE_ENV} mode.`);
+  if (process.env.NODE_ENV !== 'test') {
+    console.log('Checking for database migrations...');
+    const queryInterface = sequelize.getQueryInterface();
+    const migrationsDir = path.join(__dirname, '..', 'migrations');
 
-  try {
-    await queryInterface.createTable('SequelizeMeta', {
-      name: {
-        type: sequelize.constructor.STRING,
-        allowNull: false,
-        unique: true,
-        primaryKey: true,
-      },
-    });
-    console.log('Created SequelizeMeta table.');
-  } catch (e) {
-    // Fails silently if the table already exists.
-  }
-
-  const executed = await sequelize.query(
-    'SELECT name FROM "SequelizeMeta"',
-    { type: sequelize.QueryTypes.SELECT }
-  ).catch(() => []);
-  const executedMigrationNames = executed.map((m) => m.name);
-  console.log('Executed migrations:', executedMigrationNames);
-
-  const migrationFiles = fs.readdirSync(migrationsDir)
-    .filter((file) => file.endsWith('.js'))
-    .sort();
-
-  for (const file of migrationFiles) {
-    if (!executedMigrationNames.includes(file)) {
-      console.log(`Running migration ${file}`);
-      const migrationPath = path.join(migrationsDir, file);
-      const { href } = new URL(`file://${migrationPath}`);
-      const { default: migration } = await import(href);
-
-      await migration.up(queryInterface, sequelize.constructor);
-      await queryInterface.bulkInsert('SequelizeMeta', [{ name: file }]);
-      console.log(`Migration ${file} executed successfully.`);
+    try {
+      await queryInterface.createTable('SequelizeMeta', {
+        name: {
+          type: sequelize.constructor.STRING,
+          allowNull: false,
+          unique: true,
+          primaryKey: true,
+        },
+      });
+      console.log('Created SequelizeMeta table.');
+    } catch (e) {
+      // Fails silently if the table already exists.
     }
+
+    const executed = await sequelize.query(
+      'SELECT name FROM "SequelizeMeta"',
+      { type: sequelize.QueryTypes.SELECT }
+    ).catch(() => []);
+    const executedMigrationNames = executed.map((m) => m.name);
+    console.log('Executed migrations:', executedMigrationNames);
+
+    const migrationFiles = fs.readdirSync(migrationsDir)
+      .filter((file) => file.endsWith('.js'))
+      .sort();
+
+    for (const file of migrationFiles) {
+      if (!executedMigrationNames.includes(file)) {
+        console.log(`Running migration ${file}`);
+        const migrationPath = path.join(migrationsDir, file);
+        const { href } = new URL(`file://${migrationPath}`);
+        const { default: migration } = await import(href);
+
+        await migration.up(queryInterface, sequelize.constructor);
+        await queryInterface.bulkInsert('SequelizeMeta', [{ name: file }]);
+        console.log(`Migration ${file} executed successfully.`);
+      }
+    }
+    console.log('Database migrations are up to date.');
   }
-  console.log('Database migrations are up to date.');
 
   console.log(`starting issuer ${provider_uri}`)
   const provider = new Provider(provider_uri, { ...configuration });
@@ -121,5 +124,8 @@ async function startServer() {
   provider.use(routes(provider).routes());
   const server = provider.listen(port, () => {
     console.log(`OIDC IdP is listening on port ${port}, check its /.well-known/openid-configuration`);
+    if (process.env.NODE_ENV === 'test') {
+      console.log('OIDC provider is ready for testing.');
+    }
   });
 };
