@@ -41,12 +41,12 @@ export default {
     for (const table of allTables) {
       await queryInterface.changeColumn(table, 'createdAt', {
         type: Sequelize.DATE,
-        allowNull: false,
+        allowNull: true,
         defaultValue: Sequelize.NOW,
       });
       await queryInterface.changeColumn(table, 'updatedAt', {
         type: Sequelize.DATE,
-        allowNull: false,
+        allowNull: true,
         defaultValue: Sequelize.NOW,
       });
     }
