@@ -45,7 +45,7 @@ router.get('/login', async (ctx) => {
   const oidcClient = new issuer.Client(client);
   const url = oidcClient.authorizationUrl({
     scope: 'openid email profile',
-    code_challenge: generators.codeChallenge(generators.codeVerifier()),
+    code_challenge: openid.generators.codeChallenge(openid.generators.codeVerifier()),
     code_challenge_method: 'S256',
   });
   ctx.redirect(url);
@@ -56,7 +56,7 @@ router.get('/cb', async (ctx) => {
   const oidcClient = new issuer.Client(client);
   const params = oidcClient.callbackParams(ctx.req);
   const tokenSet = await oidcClient.callback(`${clientHost}/cb`, params, {
-    code_verifier: generators.codeVerifier(),
+    code_verifier: openid.generators.codeVerifier(),
   });
   ctx.body = {
     message: 'Authentication successful',

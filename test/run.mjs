@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import * as fs from 'fs';
 import runMigrations from './run-migrations.mjs';
 import { startServer } from '../server/server.mjs';

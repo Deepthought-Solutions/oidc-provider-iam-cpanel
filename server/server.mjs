@@ -1,3 +1,4 @@
+import 'dotenv/config';
 // server/index.js
 console.log("Starting OIDC provider server")
 
@@ -31,6 +32,11 @@ const __dirname = dirname(import.meta.url);
 
 export function startServer() {
   return new Promise(async (resolve, reject) => {
+    setTimeout(() => {
+      console.log('Server startup timed out.');
+      reject(new Error('Server startup timed out.'));
+    }, 30000); // 30 seconds timeout
+
     console.log(`Starting server in ${process.env.NODE_ENV} mode.`);
     if (process.env.NODE_ENV !== 'test') {
       console.log('Checking for database migrations...');

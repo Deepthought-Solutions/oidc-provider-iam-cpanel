@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { sequelize } from '../server/oidc/db_adapter.js';
 import * as path from 'node:path';
 import * as fs from 'node:fs';

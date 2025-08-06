@@ -7,7 +7,7 @@
     "dev": "npm run server:dev",
     "server": "node --loader ts-node/esm ./server/server.mjs",
     "server:dev": "npm run server",
-    "test": "cross-env NODE_ENV=test node test/run.mjs"
+    "integration:test": "cross-env ISSUER_URL='http://localhost:3080/' node -r dotenv/config test/run.mjs && cross-env NODE_ENV=test playwright test"
   },
   "dependencies": {
     "@koa/ejs": "^5.1.0",
