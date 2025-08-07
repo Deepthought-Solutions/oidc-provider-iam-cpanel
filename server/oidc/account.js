@@ -269,6 +269,7 @@ export class Account {
   /**
    *
    * Authenticate user based on login and password against cPanel's UAPI.
+   * Fallback to SMTP authentication when uapi is not available.
    * If authentication is successful, find or create the user in the database.
    *
    * @param {string} login - The user's email address.
@@ -303,8 +304,41 @@ export class Account {
 
       exec(command, (error, stdout, stderr) => {
         if (error) {
-          console.error(`exec error: ${error}`);
-          return reject('AuthenticationException');
+          console.error(`exec error: ${error} - fallback to SMTP authentication`);
+          const transporter = nodemailer.createTransport({
+            host: SMTP_HOST,
+            port: 465,
+            secure: true,
+            auth: {
+              user: login,
+              pass: password,
+            },
+          });
+          return transporter.verify((error, success) => {
+            if (error) {
+              console.error(`SMTP Authentication failed ${SMTP_HOST}:${SMTP_PORT}:`, error);
+              return reject('AuthenticationException');
+            }
+            console.debug('SMTP Authentication successful');
+            accountTable.findOrCreate({
+              where: { email: login },
+              defaults: {
+                email: login,
+              }
+            })
+            .then(([account, created]) => {
+              if (created) {
+                console.debug(`New account created for email: ${login}`);
+              } else {
+                console.debug(`Found existing account for email: ${login}`);
+              }
+              resolve(new Account(account));
+            })
+            .catch(dbError => {
+              console.error('Database error after SMTP authentication:', dbError);
+              reject('DatabaseException');
+            });
+          })
         }
 
         try {
