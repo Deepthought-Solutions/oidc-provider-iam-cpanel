@@ -219,17 +219,37 @@ export default (provider) => {
   router.post('/interaction/:uid/login', body, async (ctx) => {
     const { prompt: { name } } = await provider.interactionDetails(ctx.req, ctx.res);
     assert.equal(name, 'login');
+    try {
+      const account = await Account.authenticate(ctx.request.body.login, ctx.request.body.password);
+      const result = {
+        login: {
+          accountId: account.accountId,
+        },
+      };
 
-    const account = await Account.authenticate(ctx.request.body.login,ctx.request.body.password);
-    const result = {
-      login: {
-        accountId: account.accountId,
-      },
-    };
-
-    return provider.interactionFinished(ctx.req, ctx.res, result, {
-      mergeWithLastSubmission: false,
-    });
+      return provider.interactionFinished(ctx.req, ctx.res, result, {
+        mergeWithLastSubmission: false,
+      });
+    } catch (err) {
+      const {
+        uid, prompt, params, session,
+      } = await provider.interactionDetails(ctx.req, ctx.res);
+      const client = await provider.Client.find(params.client_id);
+      return ctx.render('login', {
+        client,
+        uid,
+        details: prompt.details,
+        params,
+        title: 'Sign-in',
+        error: { message: 'Invalid credentials' },
+        google,
+        session: session ? debug(session) : undefined,
+        dbg: {
+          params: debug(params),
+          prompt: debug(prompt),
+        },
+      });
+    }
   });
 
   const ENABLE_FEDERATED_ROUTES = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;

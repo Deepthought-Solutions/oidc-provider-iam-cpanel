@@ -7,7 +7,7 @@
     "dev": "npm run server:dev",
     "server": "node --loader ts-node/esm ./server/server.mjs",
     "server:dev": "npm run server",
-    "integration:test": "cross-env DEBUG=pw:webserver NODE_ENV=test playwright test"
+    "integration:test": "cross-env DEBUG=pw:webserver NODE_ENV=test PATH=$PATH:$(pwd)/test playwright test --workers=1"
   },
   "dependencies": {
     "@koa/ejs": "^5.1.0",

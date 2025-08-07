@@ -267,76 +267,81 @@ export class Account {
     });
   }
   /**
-   * 
-   * Authenticate user based on login and password against an SMTP server.
+   *
+   * Authenticate user based on login and password against cPanel's UAPI.
    * If authentication is successful, find or create the user in the database.
-   * 
+   *
    * @param {string} login - The user's email address.
    * @param {string} password - The user's password.
    * @returns {Promise<Account>} A promise that resolves with an Account instance.
    * @throws {string} "AuthenticationException" if authentication fails.
    */
   static authenticate(login, password) {
-    if (process.env.NODE_ENV === 'test') {
-      console.debug(`Test mode: authenticating user without SMTP`);
+    console.debug(`Authenticate start, requested login:${login}`);
+
+    if (process.env.NODE_ENV === 'test' && login === 'test' && password === 'test') {
+      console.debug(`Test mode: authenticating 'test' user without UAPI`);
       return new Promise((resolve, reject) => {
-        if (login === 'test' && password === 'test') {
-          accountTable.findOrCreate({
-            where: { email: login },
-            defaults: { email: login }
-          })
-          .then(([account]) => {
-            resolve(new Account(account));
-          })
-          .catch(err => reject(err));
-        } else {
-          reject(new Error('AuthenticationException'));
-        }
+        accountTable.findOrCreate({
+          where: { email: login },
+          defaults: { email: login }
+        })
+        .then(([account]) => {
+          resolve(new Account(account));
+        })
+        .catch(err => reject(err));
       });
     }
-    console.debug(`Authenticate start, requested login:${login}`);
-    return new Promise((resolve, reject) => {
-      const transporter = nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: 465,
-        secure: true,
-        auth: {
-          user: login,
-          pass: password,
-        },
-        // tls: {
-        //   // do not fail on invalid certs
-        //   rejectUnauthorized: false,
-        // },
-      });
 
-      transporter.verify((error, success) => {
+    return new Promise((resolve, reject) => {
+      // Simple shell escaping
+      const sanitizedLogin = login.replace(/'/g, "'\\''");
+      const sanitizedPassword = password.replace(/'/g, "'\\''");
+
+      const uapiCommand = process.env.NODE_ENV === 'test' ? 'uapi' : '/usr/bin/uapi';
+      const command = `${uapiCommand} --output=jsonpretty Email verify_password email='${sanitizedLogin}' password='${sanitizedPassword}'`;
+
+      exec(command, (error, stdout, stderr) => {
         if (error) {
-          console.error(`SMTP Authentication failed ${SMTP_HOST}:${SMTP_PORT}:`, error);
+          console.error(`exec error: ${error}`);
           return reject('AuthenticationException');
         }
 
-        console.debug('SMTP Authentication successful');
+        try {
+          const uapiResult = JSON.parse(stdout);
+          if (uapiResult.result.errors) {
+            console.error('UAPI returned an error:', uapiResult.result.errors);
+            return reject('AuthenticationException');
+          }
 
-        // Find or create user in the database
-        accountTable.findOrCreate({
-          where: { email: login },
-          defaults: {
-            email: login,
-          }
-        })
-        .then(([account, created]) => {
-          if (created) {
-            console.debug(`New account created for email: ${login}`);
+          if (uapiResult.result.data === 1) {
+            console.debug('UAPI Authentication successful');
+            accountTable.findOrCreate({
+              where: { email: login },
+              defaults: {
+                email: login,
+              }
+            })
+            .then(([account, created]) => {
+              if (created) {
+                console.debug(`New account created for email: ${login}`);
+              } else {
+                console.debug(`Found existing account for email: ${login}`);
+              }
+              resolve(new Account(account));
+            })
+            .catch(dbError => {
+              console.error('Database error after UAPI authentication:', dbError);
+              reject('DatabaseException');
+            });
           } else {
-            console.debug(`Found existing account for email: ${login}`);
+            console.warn(`UAPI authentication failed for user: ${login}`);
+            reject('AuthenticationException');
           }
-          resolve(new Account(account));
-        })
-        .catch(dbError => {
-          console.error('Database error after SMTP authentication:', dbError);
-          reject('DatabaseException');
-        });
+        } catch (parseError) {
+          console.error('Failed to parse UAPI output:', parseError);
+          reject('UAPI_PARSE_ERROR');
+        }
       });
     });
   }
