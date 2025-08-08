@@ -65,6 +65,7 @@ export async function startMyClient(myconfig) {
         name: claims.name,
         email: claims.email,
     };
+    ctx.session.tokens = tokens;
     ctx.redirect('/');
   });
 
@@ -106,6 +107,29 @@ export async function startMyClient(myconfig) {
     });
 
     ctx.redirect('/');
+  });
+
+  router.get('/debug', async (ctx) => {
+    if (!ctx.session.user) {
+        return ctx.redirect('/login');
+    }
+
+    const config = await openid.discovery(
+      new URL(myconfig.issuer),
+      myconfig.client.client_id,
+      myconfig.client.client_secret,
+      undefined,
+      {
+        execute: [openid.allowInsecureRequests],
+      }
+    );
+
+    const userinfo = await openid.userinfo(config, ctx.session.tokens.access_token);
+
+    await ctx.render('debug', {
+        tokens: ctx.session.tokens,
+        userinfo,
+    });
   });
 
 
