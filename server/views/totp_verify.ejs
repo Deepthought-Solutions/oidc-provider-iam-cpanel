@@ -14,7 +14,7 @@
   <form action="/interaction/<%= uid %>/totp/verify" method="post">
     <div>
       <label for="token">Authentication Code</label>
-      <input type="text" name="token" id="token" required autocomplete="off" inputmode="numeric" pattern="[0-9]*">
+      <input autofocus type="text" name="token" id="token" required autocomplete="off" inputmode="numeric" pattern="[0-9]*">
     </div>
     <button type="submit">Verify</button>
   </form>

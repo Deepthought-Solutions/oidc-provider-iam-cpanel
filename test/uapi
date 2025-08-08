@@ -1,0 +1,23 @@
+#!/bin/bash
+
+if [ "$4" = "email=user@example.com" ] && [ "$5" = "password=password" ]; then
+  echo '{
+    "result": {
+      "data": 1,
+      "errors": null,
+      "messages": null,
+      "metadata": {},
+      "status": 1
+    }
+  }'
+else
+  echo '{
+    "result": {
+      "data": 0,
+      "errors": ["Authentication failed."],
+      "messages": null,
+      "metadata": {},
+      "status": 1
+    }
+  }'
+fi

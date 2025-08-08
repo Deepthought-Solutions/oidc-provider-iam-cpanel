@@ -33,7 +33,7 @@ const __dirname = dirname(import.meta.url);
 
 export function startServer() {
   return new Promise(async (resolve, reject) => {
-    setTimeout(() => {
+    const serverTimeout = setTimeout(() => {
       console.log('Server startup timed out.');
       reject(new Error('Server startup timed out.'));
     }, 30000); // 30 seconds timeout
@@ -136,6 +136,7 @@ export function startServer() {
       if (process.env.NODE_ENV === 'test') {
         console.log('OIDC provider is ready for testing.');
       }
+      clearTimeout(serverTimeout);
       resolve()
     });
   })
