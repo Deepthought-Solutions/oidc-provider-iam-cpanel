@@ -19,6 +19,17 @@ test.afterAll(async () => {
   }
 });
 
+const Account = (await import('../server/oidc/account.js')).default;
+  Account.authenticate = async () => {
+    return {
+      accountId: 'testuser',
+      profile: {
+        email: 'testuser@example.com',
+        email_verified: true,
+      },
+    };
+  };
+
 test('enrollment flow', async ({ page }) => {
   // Go to the test client
   await page.goto('http://localhost:3001/login');
