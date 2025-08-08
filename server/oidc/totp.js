@@ -2,7 +2,7 @@ import { sequelize } from "./db_adapter.js";
 import { DataTypes } from 'sequelize';
 import * as OTPAuth from "otpauth";
 
-const issuer_name = new URL(process.env.ISSUER_URL).hostname
+const issuer_name = new URL(process.env.ISSUER_URL || 'http://localhost:3080').hostname
 
 export const TotpSecret = sequelize.define("totp_secrets", {
     id: {
