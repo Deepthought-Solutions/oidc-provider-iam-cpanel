@@ -50,7 +50,6 @@ async function main() {
   await runMigrations();
   await provisionClient();
   console.log('Starting OIDC provider...');
-  // process.env.ISSUER_URL = 'http://localhost:3080/';
   startMyClient({client:client, issuer: providerIssuer, port: port}).then(() => {
     startServer()
   })
