@@ -101,6 +101,7 @@ class SequelizeAdapter {
   }
 
   async upsert(id, data, expiresIn) {
+    console.log(`Upserting ${id} in ${this.name}`)
     await this.model.upsert({
       id,
       data,
@@ -139,6 +140,7 @@ class SequelizeAdapter {
   }
 
   async destroy(id) {
+    console.log(`Destroying ${id} in ${this.name}`)
     await this.model.destroy({ where: { id } });
   }
 

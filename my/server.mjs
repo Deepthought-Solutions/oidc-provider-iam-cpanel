@@ -64,6 +64,7 @@ export async function startMyClient(myconfig) {
     ctx.session.user = {
         name: claims.name,
         email: claims.email,
+        sub: claims.sub
     };
     ctx.session.tokens = tokens;
     ctx.redirect('/');
@@ -123,12 +124,39 @@ export async function startMyClient(myconfig) {
         execute: [openid.allowInsecureRequests],
       }
     );
+    // console.log(ctx.session.tokens)
+    let userinfo = {};
+    const userInfoResponse = await fetch(`${config.serverMetadata().userinfo_endpoint}`, {
+      headers: {
+        'Authorization': `Bearer ${ctx.session.tokens.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (userInfoResponse.ok) {
+      userinfo = await userInfoResponse.json()
+    } else {
+      console.log(userInfoResponse)
+      userinfo = {
+        url: config.serverMetadata().userinfo_endpoint,
+        code: userInfoResponse.status,
+        body: userInfoResponse.body,
+        headers: {}
+      }
+      userInfoResponse.headers.forEach((v,k) => {userinfo.headers[k] = v})
+    }
 
-    const userinfo = await openid.userinfo(config, ctx.session.tokens.access_token);
-
+    try {
+      const userinfo2 = await openid.fetchUserInfo(
+        config,
+        ctx.session.tokens.access_token,
+        ctx.session.user.sub
+      )
+    } catch (error) {
+      console.log(error)
+    }
     await ctx.render('debug', {
         tokens: ctx.session.tokens,
-        userinfo,
+        userinfo: userinfo,
     });
   });
 

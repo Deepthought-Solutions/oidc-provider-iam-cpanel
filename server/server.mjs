@@ -12,7 +12,7 @@ import { promisify } from 'node:util';
 import routes from './oidc/routes.js';
 import configuration from './oidc/configuration.js';
 import { getConfiguredClients } from './oidc/configuration.js';
-import { sequelize } from './oidc/db_adapter.js';
+import SequelizeAdapter, { sequelize } from './oidc/db_adapter.js';
 import fs from 'node:fs';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -87,7 +87,11 @@ export function startServer() {
     configuration.clients = await getConfiguredClients()
     console.log(`starting issuer ${provider_uri}`)
     const provider = new Provider(provider_uri, { ...configuration });
-
+    // provider.on("grant.success", (ctx) => {
+    // provider.on("access_token.issued", (accessToken) => {
+    //   console.log(accessToken);
+    //   new SequelizeAdapter("AccessToken").upsert(accessToken);
+    // })
     const directives = helmet.contentSecurityPolicy.getDefaultDirectives();
     delete directives['form-action'];
     const pHelmet = promisify(helmet({
