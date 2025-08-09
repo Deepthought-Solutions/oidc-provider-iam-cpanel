@@ -57,6 +57,15 @@ export class Account {
       name: account.pseudo,
       admin: account.pseudo == "Admin"
     };
+    this.claims = function(use, scope) {
+        // Return only the claims requested by the scope
+        return {
+          sub: account.id,
+          email: account.email,
+          email_verified: account.emailVerified,
+          name: account.name,
+        };
+      }
     // store.set(this.accountId, this)
   }
 

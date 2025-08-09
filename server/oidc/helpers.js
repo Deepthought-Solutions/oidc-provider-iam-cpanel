@@ -27,20 +27,21 @@ export async function renderError(ctx, out, error) {
   });
   }
 
-export async function findAccount(ctx, id, token) { // eslint-disable-line no-unused-vars
+export async function findAccount(ctx, sub) { // eslint-disable-line no-unused-vars
   // token is a reference to the token used for which a given account is being loaded,
   //   it is undefined in scenarios where account claims are returned from authorization endpoint
   // ctx is the koa request context
-  console.debug(`FindAccount:${id}`);
-  console.debug(`FindAccount:${token}`);
+  console.debug(`FindAccount:${sub}`);
+  // console.debug(`FindAccount:${token}`);
   let account;
   account = await accountTable.findOne({
     where: {
       uid: {
-        [Op.eq]: id
+        [Op.eq]: sub
       }
     }
   });
+  console.debug(`FoundAccount:${account}`);
   if (account) {
     return new Account(account);
   } else {

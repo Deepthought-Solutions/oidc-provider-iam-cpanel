@@ -24,6 +24,7 @@ const Account = (await import('../server/oidc/account.js')).default;
     return {
       accountId: 'testuser',
       profile: {
+        name: 'testuser',
         email: 'testuser@example.com',
         email_verified: true,
       },
@@ -59,10 +60,10 @@ test('enrollment flow', async ({ page }) => {
   // Submit the consent form
   await page.click('button[type="submit"]');
 
-  // After consent, we should be redirected back to the client
-  await expect(page).toHaveURL(/.*localhost:3001\/cb\?.*/);
+  // After consent, we should be redirected back to the client, which in turn redirects to the home page.
+  await expect(page).toHaveURL('http://localhost:3001/');
 
   // The client should show a success message
   const content = await page.textContent('body');
-  expect(content).toContain('Authentication successful');
+  expect(content).toContain('Your email is test');
 });
