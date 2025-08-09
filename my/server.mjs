@@ -8,6 +8,12 @@ import path from 'path';
 import desm from 'desm';
 import { exec } from 'child_process';
 
+let discoveryConfig = {};
+
+if (process.env.NODE_ENV.toLowerCase() !== "production") {
+  discoveryConfig['execute'] = [openid.allowInsecureRequests]
+}
+
 export async function startMyClient(myconfig) {
   const app = new Koa();
   const router = new Router();
@@ -32,9 +38,7 @@ export async function startMyClient(myconfig) {
       myconfig.client.client_id,
       myconfig.client.client_secret,
       undefined,
-      {
-        execute: [openid.allowInsecureRequests],
-      }
+      discoveryConfig
     );
     code_verifier = openid.randomPKCECodeVerifier();
     const code_challenge = await openid.calculatePKCECodeChallenge(code_verifier);
@@ -53,9 +57,7 @@ export async function startMyClient(myconfig) {
       myconfig.client.client_id,
       myconfig.client.client_secret,
       undefined,
-      {
-        execute: [openid.allowInsecureRequests],
-      }
+      discoveryConfig
     );
     const tokens = await openid.authorizationCodeGrant(config, new URL(ctx.href), {
       pkceCodeVerifier: code_verifier,
@@ -120,9 +122,7 @@ export async function startMyClient(myconfig) {
       myconfig.client.client_id,
       myconfig.client.client_secret,
       undefined,
-      {
-        execute: [openid.allowInsecureRequests],
-      }
+      discoveryConfig
     );
     // console.log(ctx.session.tokens)
     let userinfo = {};
