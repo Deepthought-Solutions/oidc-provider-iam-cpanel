@@ -6,7 +6,7 @@
  * for DeviceCode model. uid should be additionaly indexed for Session model. For sequelize
  * migrations @see https://github.com/Rogger794/node-oidc-provider/tree/examples/example/migrations/sequelize
 */
-import dotenv from "dotenv";
+// import dotenv from "dotenv";
 
 // npm i --save sequelize
 import Sequelize from 'sequelize'; // eslint-disable-line import/no-unresolved
@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-dotenv.config();
+// dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,6 +101,7 @@ class SequelizeAdapter {
   }
 
   async upsert(id, data, expiresIn) {
+    console.log(`Upserting ${id} in ${this.name}`)
     await this.model.upsert({
       id,
       data,
@@ -139,6 +140,7 @@ class SequelizeAdapter {
   }
 
   async destroy(id) {
+    console.log(`Destroying ${id} in ${this.name}`)
     await this.model.destroy({ where: { id } });
   }
 

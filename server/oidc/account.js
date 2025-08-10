@@ -1,5 +1,5 @@
 import { exec } from "child_process";
-import dotenv from "dotenv";
+// import dotenv from "dotenv";
 import crypto from "crypto";
 import { DataTypes, Op } from 'sequelize';
 import { sequelize } from "./db_adapter.js";
@@ -7,7 +7,7 @@ import nodemailer from "nodemailer";
 import { v4 as uuidv4 } from 'uuid';
 import { TotpSecret } from "./totp.js";
 
-dotenv.config();
+// dotenv.config();
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = process.env.SMTP_PORT;
@@ -57,6 +57,15 @@ export class Account {
       name: account.pseudo,
       admin: account.pseudo == "Admin"
     };
+    this.claims = function(use, scope) {
+        // Return only the claims requested by the scope
+        return {
+          sub: account.id,
+          email: account.email,
+          email_verified: account.emailVerified,
+          name: account.name,
+        };
+      }
     // store.set(this.accountId, this)
   }
 
