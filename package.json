@@ -3,6 +3,19 @@
   "version": "1.0.0",
   "description": "OIDC Provider for the project",
   "type": "module",
+  "main": "./index.cjs",
+  "exports": {
+    "require": "./index.cjs",
+    "import": "./index.mjs"
+  },
+  "files": [
+    "my/",
+    "server/",
+    "config/",
+    "migrations/",
+    "index.cjs",
+    "index.mjs"
+  ],
   "scripts": {
     "dev": "npm run server:dev",
     "server": "node --loader ts-node/esm ./server/server.mjs",
