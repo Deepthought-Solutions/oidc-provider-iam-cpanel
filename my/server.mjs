@@ -166,6 +166,6 @@ export async function startMyClient(myconfig) {
 
 
   app.listen(myconfig.port, () => {
-    console.log(`Test client server listening on port ${myconfig.port}`);
+    console.log(`My client server listening on port ${myconfig.port}`);
   });
 }

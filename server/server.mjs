@@ -1,4 +1,4 @@
-import 'dotenv/config';
+// import 'dotenv/config';
 // server/index.js
 console.log("Starting OIDC provider server")
 

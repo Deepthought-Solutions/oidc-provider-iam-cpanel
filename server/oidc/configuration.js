@@ -8,10 +8,10 @@ import { sequelize, default as SequelizeAdapter } from "./db_adapter.js";
 import Sequelize from 'sequelize'; // eslint-disable-line import/no-unresolved
 import { findAccount, renderError, postLogoutSuccessSource, logoutSource } from "./helpers.js";
 
-import dotenv from 'dotenv'
+// import dotenv from 'dotenv'
 import { userInfo } from 'node:os';
 import Account from './account.js';
-dotenv.config();
+// dotenv.config();
 
 export async function getConfiguredClients() {
       const Client = sequelize.model('_oidc_Clients');
