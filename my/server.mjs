@@ -10,6 +10,17 @@ import { exec } from 'child_process';
 
 let discoveryConfig = {};
 
+async function logger(ctx, next) {
+  const start = Date.now();
+
+  await next(); // pass control to the next middleware
+
+  const ms = Date.now() - start;
+  console.log(`[${start}] ${ctx.method} ${ctx.url} - ${ms}ms`);
+}
+
+// module.exports = logger;
+
 if (process.env.NODE_ENV.toLowerCase() !== "production") {
   discoveryConfig['execute'] = [openid.allowInsecureRequests]
 }
@@ -18,6 +29,7 @@ export async function startMyClient(myconfig) {
   const app = new Koa();
   const router = new Router();
 
+  app.use(logger)
   app.keys = ['some secret hurr'];
   app.use(session(app));
   app.use(koaBody());
