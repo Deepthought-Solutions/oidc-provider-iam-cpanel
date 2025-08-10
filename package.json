@@ -14,7 +14,8 @@
     "config/",
     "migrations/",
     "index.cjs",
-    "index.mjs"
+    "index.mjs",
+    ".sequelizerc.js"
   ],
   "scripts": {
     "dev": "npm run server:dev",
