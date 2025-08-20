@@ -9,6 +9,8 @@ import Sequelize from 'sequelize'; // eslint-disable-line import/no-unresolved
 import { findAccount, renderError, postLogoutSuccessSource, logoutSource } from "./helpers.js";
 
 import dotenv from 'dotenv'
+import { userInfo } from 'node:os';
+import Account from './account.js';
 dotenv.config();
 
 export async function getConfiguredClients() {
@@ -75,6 +77,9 @@ export default {
       'admin'
     ],
     features: {
+      userinfo: {
+          enabled: true
+        },
       devInteractions: { enabled: false },
       rpInitiatedLogout: {
         enabled: true,
@@ -110,6 +115,18 @@ export default {
         }
       },
     },
+    extraAccessTokenClaims: async (ctx, token) => {
+    // `token` is the AccessToken model instance
+    // Include whatever user info `userinfo` will need
+      const account = await Account.findByUID(token.accountId);
+
+      return {
+        sub: account.accountId,            // required
+        email: account.profile.email,       // example claim
+        email_verified: account.profile.emailVerified, // if you have it
+        name: account.profile.name,
+      }
+    },
     /**
      * Add informations in the AccessToken once user is authenticated
      * 
@@ -121,6 +138,11 @@ export default {
       console.log("======= extraTokenClaims =======");
       // console.log(ctx.res);
       console.log(token);
+      // new SequelizeAdapter("AccessToken").upsert({
+      //   id: token.,
+      //   grantId: token.grantId
+      // });
+
       try {
         let account = await findAccount(ctx, token.accountId , token)
         let result = {};
@@ -135,4 +157,7 @@ export default {
       return null;// {'foo':'bar'};account.profile;
     },
     jwks: jwks,
+    formats: {
+      AccessToken: 'jwt',
+    }
   };

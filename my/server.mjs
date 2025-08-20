@@ -1,13 +1,28 @@
 import Koa from 'koa';
 import Router from '@koa/router';
-import * as openid from 'openid-client'
-
-
+import * as openid from 'openid-client';
+import session from 'koa-session';
+import { koaBody } from 'koa-body';
+import render from '@koa/ejs';
+import path from 'path';
+import desm from 'desm';
+import { exec } from 'child_process';
 
 export async function startMyClient(myconfig) {
   const app = new Koa();
   const router = new Router();
 
+  app.keys = ['some secret hurr'];
+  app.use(session(app));
+  app.use(koaBody());
+
+  render(app, {
+    root: path.join(desm(import.meta.url), 'views'),
+    layout: '_layout',
+    viewExt: 'ejs',
+    cache: false,
+    debug: true,
+  });
 
   let code_verifier;
 
@@ -45,16 +60,104 @@ export async function startMyClient(myconfig) {
     const tokens = await openid.authorizationCodeGrant(config, new URL(ctx.href), {
       pkceCodeVerifier: code_verifier,
     });
-    ctx.body = {
-      message: 'Authentication successful',
-      tokenSet: tokens,
+    const claims = tokens.claims();
+    ctx.session.user = {
+        name: claims.name,
+        email: claims.email,
+        sub: claims.sub
     };
+    ctx.session.tokens = tokens;
+    ctx.redirect('/');
   });
 
   router.get('/', async (ctx) => {
-    ctx.body = {
-      message: 'It works',
-    };
+    if (!ctx.session.user) {
+        return ctx.redirect('/login');
+    }
+    await ctx.render('home', { user: ctx.session.user });
+  });
+
+  router.get('/change-password', async (ctx) => {
+    if (!ctx.session.user) {
+        return ctx.redirect('/login');
+    }
+    await ctx.render('change-password');
+  });
+
+  router.post('/change-password', async (ctx) => {
+    if (!ctx.session.user) {
+        ctx.status = 401;
+        return;
+    }
+    const { password } = ctx.request.body;
+    const email = ctx.session.user.email;
+
+    // This is where we would call the uapi
+    const uapiCommand = `test/uapi Email passwd_pop --output=jsonpretty email='${email}' password='${password}'`;
+
+    await new Promise((resolve, reject) => {
+        exec(uapiCommand, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`exec error: ${error}`);
+                return reject(error);
+            }
+            console.log(`stdout: ${stdout}`);
+            console.error(`stderr: ${stderr}`);
+            resolve(stdout);
+        });
+    });
+
+    ctx.redirect('/');
+  });
+
+  router.get('/debug', async (ctx) => {
+    if (!ctx.session.user) {
+        return ctx.redirect('/login');
+    }
+
+    const config = await openid.discovery(
+      new URL(myconfig.issuer),
+      myconfig.client.client_id,
+      myconfig.client.client_secret,
+      undefined,
+      {
+        execute: [openid.allowInsecureRequests],
+      }
+    );
+    // console.log(ctx.session.tokens)
+    let userinfo = {};
+    const userInfoResponse = await fetch(`${config.serverMetadata().userinfo_endpoint}`, {
+      headers: {
+        'Authorization': `Bearer ${ctx.session.tokens.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (userInfoResponse.ok) {
+      userinfo = await userInfoResponse.json()
+    } else {
+      console.log(userInfoResponse)
+      userinfo = {
+        url: config.serverMetadata().userinfo_endpoint,
+        code: userInfoResponse.status,
+        body: userInfoResponse.body,
+        headers: {}
+      }
+      userInfoResponse.headers.forEach((v,k) => {userinfo.headers[k] = v})
+    }
+
+    try {
+      const userinfo2 = await openid.fetchUserInfo(
+        config,
+        ctx.session.tokens.access_token,
+        ctx.session.user.sub
+      )
+    } catch (error) {
+      console.log(error)
+    }
+    await ctx.render('debug', {
+        tokens: ctx.session.tokens,
+        userinfo: userinfo,
+    });
   });
 
 
@@ -66,4 +169,3 @@ export async function startMyClient(myconfig) {
     console.log(`Test client server listening on port ${myconfig.port}`);
   });
 }
-
