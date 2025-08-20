@@ -13,7 +13,7 @@ import * as OTPAuth from "otpauth";
 test.afterAll(async () => {
   console.log('Stopping test server...');
   try {
-    execSync("pkill -f 'node -r dotenv/config test/run.mjs'");
+    execSync("pkill -f 'node test/run.mjs'");
   } catch (e) {
     // Ignore errors if the process is already dead
   }

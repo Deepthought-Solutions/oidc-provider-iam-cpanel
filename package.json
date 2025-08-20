@@ -3,6 +3,20 @@
   "version": "1.0.0",
   "description": "OIDC Provider for the project",
   "type": "module",
+  "main": "./index.cjs",
+  "exports": {
+    "require": "./index.cjs",
+    "import": "./index.mjs"
+  },
+  "files": [
+    "my/",
+    "server/",
+    "config/",
+    "migrations/",
+    "index.cjs",
+    "index.mjs",
+    ".sequelizerc.js"
+  ],
   "scripts": {
     "dev": "npm run server:dev",
     "server": "node --loader ts-node/esm ./server/server.mjs",
@@ -18,8 +32,8 @@
     "jose": "^5.2.2",
     "koa": "^3.0.1",
     "koa-body": "^6.0.1",
-    "koa-session": "^6.4.0",
     "koa-mount": "^4.2.0",
+    "koa-session": "^6.4.0",
     "lodash": "^4.17.21",
     "nodemailer": "^7.0.5",
     "oidc-provider": "^9.4.0",

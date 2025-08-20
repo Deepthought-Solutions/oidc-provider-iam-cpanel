@@ -8,10 +8,28 @@ import path from 'path';
 import desm from 'desm';
 import { exec } from 'child_process';
 
+let discoveryConfig = {};
+
+async function logger(ctx, next) {
+  const start = Date.now();
+
+  await next(); // pass control to the next middleware
+
+  const ms = Date.now() - start;
+  console.log(`[${start}] ${ctx.method} ${ctx.url} - ${ms}ms`);
+}
+
+// module.exports = logger;
+
+if (process.env.NODE_ENV.toLowerCase() !== "production") {
+  discoveryConfig['execute'] = [openid.allowInsecureRequests]
+}
+
 export async function startMyClient(myconfig) {
   const app = new Koa();
   const router = new Router();
 
+  app.use(logger)
   app.keys = ['some secret hurr'];
   app.use(session(app));
   app.use(koaBody());
@@ -32,9 +50,7 @@ export async function startMyClient(myconfig) {
       myconfig.client.client_id,
       myconfig.client.client_secret,
       undefined,
-      {
-        execute: [openid.allowInsecureRequests],
-      }
+      discoveryConfig
     );
     code_verifier = openid.randomPKCECodeVerifier();
     const code_challenge = await openid.calculatePKCECodeChallenge(code_verifier);
@@ -53,9 +69,7 @@ export async function startMyClient(myconfig) {
       myconfig.client.client_id,
       myconfig.client.client_secret,
       undefined,
-      {
-        execute: [openid.allowInsecureRequests],
-      }
+      discoveryConfig
     );
     const tokens = await openid.authorizationCodeGrant(config, new URL(ctx.href), {
       pkceCodeVerifier: code_verifier,
@@ -120,9 +134,7 @@ export async function startMyClient(myconfig) {
       myconfig.client.client_id,
       myconfig.client.client_secret,
       undefined,
-      {
-        execute: [openid.allowInsecureRequests],
-      }
+      discoveryConfig
     );
     // console.log(ctx.session.tokens)
     let userinfo = {};
@@ -166,6 +178,6 @@ export async function startMyClient(myconfig) {
 
 
   app.listen(myconfig.port, () => {
-    console.log(`Test client server listening on port ${myconfig.port}`);
+    console.log(`My client server listening on port ${myconfig.port}`);
   });
 }
