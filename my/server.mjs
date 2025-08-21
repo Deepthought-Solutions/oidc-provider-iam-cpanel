@@ -27,9 +27,14 @@ async function logger(ctx, next) {
 
 }
 
-// module.exports = logger;
+async function notfound(ctx, next) {
+  await ctx.render('notfound', { url: ctx.url });  
 
-if (process.env.NODE_ENV.toLowerCase() !== "production") {
+}
+
+// module.exports = logger;
+const NODE_ENV = process.env.NODE_ENV || 'developpement';
+if (NODE_ENV.toLowerCase() !== "production") {
   discoveryConfig['execute'] = [openid.allowInsecureRequests]
 }
 
@@ -182,6 +187,7 @@ export async function startMyClient(myconfig) {
 
 
   app.use(router.routes());
+  app.use(notfound);
 
 
 
