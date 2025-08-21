@@ -11,14 +11,20 @@ import { exec } from 'child_process';
 let discoveryConfig = {};
 
 async function logger(ctx, next) {
-  
-  const start = Date.now();
-  console.log(`[${start}] ${ctx.method} ${ctx.url}`);
+  try {
+    const start = Date.now();
+    console.log(`[${start}] ${ctx.method} ${ctx.url}`);
 
-  await next(); // pass control to the next middleware
+    await next(); // pass control to the next middleware
 
-  const ms = Date.now() - start;
-  console.log(`[${start}] ${ctx.method} ${ctx.url} - ${ms}ms`);
+    const ms = Date.now() - start;
+    console.log(`[${start}] ${ctx.method} ${ctx.url} - ${ms}ms`);
+  } catch (e) {
+    console.log("exception in logging")
+    console.log(e)
+    await next()
+  }
+
 }
 
 // module.exports = logger;
