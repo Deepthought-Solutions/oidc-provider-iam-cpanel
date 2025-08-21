@@ -11,6 +11,8 @@ import { exec } from 'child_process';
 let discoveryConfig = {};
 
 async function logger(ctx, next) {
+  console.log(`[${start}] ${ctx.method} ${ctx.url}`);
+
   const start = Date.now();
 
   await next(); // pass control to the next middleware
