@@ -41,7 +41,9 @@ if (NODE_ENV.toLowerCase() !== "production") {
 export async function startMyClient(myconfig) {
   const app = new Koa();
   const router = new Router();
-
+  let prefix = myconfig.prefix || '/'
+  "".endsWith
+  if (!prefix.endsWith('/')) prefix = `${prefix}/`
   app.use(logger)
   app.keys = ['some secret hurr'];
   app.use(session(app));
@@ -57,7 +59,7 @@ export async function startMyClient(myconfig) {
 
   let code_verifier;
 
-  router.get('/login', async (ctx) => {
+  router.get(`${prefix}login`, async (ctx) => {
     const config = await openid.discovery(
       new URL(myconfig.issuer),
       myconfig.client.client_id,
@@ -76,7 +78,7 @@ export async function startMyClient(myconfig) {
     ctx.redirect(url);
   });
 
-  router.get('/cb', async (ctx) => {
+  router.get(`${prefix}cb`, async (ctx) => {
     const config = await openid.discovery(
       new URL(myconfig.issuer),
       myconfig.client.client_id,
@@ -94,24 +96,24 @@ export async function startMyClient(myconfig) {
         sub: claims.sub
     };
     ctx.session.tokens = tokens;
-    ctx.redirect('/');
+    ctx.redirect(`${prefix}`);
   });
 
-  router.get('/', async (ctx) => {
+  router.get(`${prefix}`, async (ctx) => {
     if (!ctx.session.user) {
-        return ctx.redirect('/login');
+        return ctx.redirect(`${prefix}login`);
     }
     await ctx.render('home', { user: ctx.session.user });
   });
 
-  router.get('/change-password', async (ctx) => {
+  router.get(`${prefix}change-password`, async (ctx) => {
     if (!ctx.session.user) {
-        return ctx.redirect('/login');
+        return ctx.redirect(`${prefix}login`);
     }
     await ctx.render('change-password');
   });
 
-  router.post('/change-password', async (ctx) => {
+  router.post(`${prefix}change-password`, async (ctx) => {
     if (!ctx.session.user) {
         ctx.status = 401;
         return;
@@ -134,12 +136,12 @@ export async function startMyClient(myconfig) {
         });
     });
 
-    ctx.redirect('/');
+    ctx.redirect(`${prefix}`);
   });
 
-  router.get('/debug', async (ctx) => {
+  router.get(`${prefix}debug`, async (ctx) => {
     if (!ctx.session.user) {
-        return ctx.redirect('/login');
+        return ctx.redirect(`${prefix}login`);
     }
 
     const config = await openid.discovery(
