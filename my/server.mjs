@@ -64,11 +64,12 @@ export async function startMyClient(myconfig) {
       new URL(myconfig.issuer),
       myconfig.client.client_id,
       myconfig.client.client_secret,
-      undefined,
+      openid.ClientSecretBasic(myconfig.client.client_secret),
       discoveryConfig
     );
     code_verifier = openid.randomPKCECodeVerifier();
     const code_challenge = await openid.calculatePKCECodeChallenge(code_verifier);
+    // redirect_uri = ctx.request.url.replace('login','cb')
     const url = openid.buildAuthorizationUrl(config, {
       scope: 'openid email profile',
       code_challenge,
@@ -79,13 +80,15 @@ export async function startMyClient(myconfig) {
   });
 
   router.get(`${prefix}cb`, async (ctx) => {
+    console.log("Retrieving OIDC config with discovery")
     const config = await openid.discovery(
       new URL(myconfig.issuer),
       myconfig.client.client_id,
       myconfig.client.client_secret,
-      undefined,
+      openid.ClientSecretBasic(myconfig.client.client_secret),
       discoveryConfig
     );
+
     const tokens = await openid.authorizationCodeGrant(config, new URL(ctx.href), {
       pkceCodeVerifier: code_verifier,
     });
@@ -148,7 +151,7 @@ export async function startMyClient(myconfig) {
       new URL(myconfig.issuer),
       myconfig.client.client_id,
       myconfig.client.client_secret,
-      undefined,
+      openid.ClientSecretBasic(myconfig.client.client_secret),
       discoveryConfig
     );
     // console.log(ctx.session.tokens)
