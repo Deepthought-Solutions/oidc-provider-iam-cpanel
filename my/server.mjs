@@ -177,14 +177,40 @@ export async function startMyClient(myconfig) {
         ctx.status = 401;
         return;
     }
-    const { password } = ctx.request.body;
+    const { current_password, password, confirm_password } = ctx.request.body;
+    if ( !password !== confirm_password) {
+      ctx.status = 400;
+      return await ctx.render(error, {
+        message: `Password doesn't match confirmation`
+      })
+    }
     const email = ctx.session.user.email;
+    // Simple shell escaping
+    const sanitizedLogin = email.replace(/'/g, "'\\''");
+    const sanitizedPassword = password.replace(/'/g, "'\\''");
+    const sanitizedCurrentPassword = current_password.replace(/'/g, "'\\''");
+    const uapiCommand = process.env.NODE_ENV === 'test' ? 'uapi' : '/usr/bin/uapi';
+
+    const verifyPwCommand = `${uapiCommand} --output=jsonpretty Email verify_password email='${sanitizedLogin}' password='${sanitizedCurrentPassword}'`;
+
 
     // This is where we would call the uapi
-    const uapiCommand = `test/uapi Email passwd_pop --output=jsonpretty email='${email}' password='${password}'`;
-
+    const ChangePwCommand = `${uapiCommand} Email passwd_pop --output=jsonpretty email='${sanitizedLogin}' password='${sanitizedPassword}'`;
     await new Promise((resolve, reject) => {
-        exec(uapiCommand, (error, stdout, stderr) => {
+      exec(verifyPwCommand, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`exec error: ${error}`);
+          return reject(error);
+        }
+        const uapiResult = JSON.parse(stdout);
+        if (uapiResult.result.errors) {
+          console.error('UAPI returned an error:', uapiResult.result.errors);
+          return reject('AuthenticationException');
+        }
+      })
+    });
+    await new Promise((resolve, reject) => {
+        exec(ChangePwCommand, (error, stdout, stderr) => {
             if (error) {
                 console.error(`exec error: ${error}`);
                 return reject(error);
