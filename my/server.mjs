@@ -7,24 +7,22 @@ import render from '@koa/ejs';
 import path from 'path';
 import desm from 'desm';
 import { exec } from 'child_process';
-import * as jose from 'jose';
 
 let discoveryConfig = {};
 
 async function logger(ctx, next) {
-  const start = Date.now();
   try {
+    const start = Date.now();
     console.log(`[${start}] ${ctx.method} ${ctx.url}`);
+
     await next(); // pass control to the next middleware
 
-  } catch (e) {
-    console.log("exception during  logging")
-    console.log(e)
-    await ctx.render('error', {
-    });
-  } finally {
     const ms = Date.now() - start;
     console.log(`[${start}] ${ctx.method} ${ctx.url} - ${ms}ms`);
+  } catch (e) {
+    console.log("exception in logging")
+    console.log(e)
+    await next()
   }
 
 }
@@ -62,99 +60,45 @@ export async function startMyClient(myconfig) {
   let code_verifier;
 
   router.get(`${prefix}login`, async (ctx) => {
-    // const config = await openid.discovery(
-    //   new URL(myconfig.issuer),
-    //   myconfig.client.client_id,
-    //   myconfig.client.client_secret,
-    //   openid.ClientSecretBasic(myconfig.client.client_secret),
-    //   discoveryConfig
-    // );
-    // code_verifier = openid.randomPKCECodeVerifier();
-    // const code_challenge = await openid.calculatePKCECodeChallenge(code_verifier);
-    // // redirect_uri = ctx.request.url.replace('login','cb')
-    // const url = openid.buildAuthorizationUrl(config, {
-    //   scope: 'openid email profile',
-    //   code_challenge,
-    //   code_challenge_method: 'S256',
-    //   redirect_uri: myconfig.client.redirect_uris[0],
-    // });
-
-    const authorizationUrl = new URL(`${myconfig.issuer}/auth`);
-    authorizationUrl.searchParams.set('client_id', myconfig.client.client_id);
-    authorizationUrl.searchParams.set('response_type', 'code');
-    authorizationUrl.searchParams.set('scope', 'openid email profile');
-    authorizationUrl.searchParams.set('redirect_uri', myconfig.client.redirect_uris[0]);
-
-    // if (pageContext.koaContext) {
-    //   pageContext.koaContext.header['Location'] = authorizationUrl.toString();
-    // }
-        // throw redirect(authorizationUrl.toString());
-    ctx.redirect(authorizationUrl.toString());
+    const config = await openid.discovery(
+      new URL(myconfig.issuer),
+      myconfig.client.client_id,
+      myconfig.client.client_secret,
+      openid.ClientSecretBasic(myconfig.client.client_secret),
+      discoveryConfig
+    );
+    code_verifier = openid.randomPKCECodeVerifier();
+    const code_challenge = await openid.calculatePKCECodeChallenge(code_verifier);
+    // redirect_uri = ctx.request.url.replace('login','cb')
+    const url = openid.buildAuthorizationUrl(config, {
+      scope: 'openid email profile',
+      code_challenge,
+      code_challenge_method: 'S256',
+      redirect_uri: myconfig.client.redirect_uris[0],
+    });
+    ctx.redirect(url);
   });
 
   router.get(`${prefix}cb`, async (ctx) => {
     console.log("Retrieving OIDC config with discovery")
-    // const config = await openid.discovery(
-    //   new URL(myconfig.issuer),
-    //   myconfig.client.client_id,
-    //   myconfig.client.client_secret,
-    //   openid.ClientSecretBasic(myconfig.client.client_secret),
-    //   discoveryConfig
-    // );
+    const config = await openid.discovery(
+      new URL(myconfig.issuer),
+      myconfig.client.client_id,
+      myconfig.client.client_secret,
+      openid.ClientSecretBasic(myconfig.client.client_secret),
+      discoveryConfig
+    );
 
-    // const tokens = await openid.authorizationCodeGrant(config, new URL(ctx.href), {
-    //   pkceCodeVerifier: code_verifier,
-    // });
-    
-  console.log(`OIDC callback auth code route`)
-    const code = ctx.query.code;
-    const params = new URLSearchParams();
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', myconfig.client.redirect_uris[0]);
-    params.append('client_id', myconfig.client.client_id);
-    params.append('client_secret', myconfig.client.client_secret);
-
-    const response = await fetch(`${myconfig.issuer}/token`, {
-      method: 'POST',
-      body: params,
-      // headers: {
-      //   'Authorization': 'Basic ' + Buffer.from(`${myconfig.client.client_id}:${myconfig.client.client_secret}`).toString('base64')
-      // }
+    const tokens = await openid.authorizationCodeGrant(config, new URL(ctx.href), {
+      pkceCodeVerifier: code_verifier,
     });
-    if (!response.ok) {
-      console.error("OIDC token exchange failed:", await response.text());
-      ctx.session.user = null; // Clear any partial session
-      await ctx.render('error', {
-        'message': 'Authentication failure'
-      });
-      return;
-    }
-    
-    const tokens = await response.json();
-    // console.log(tokens)
-
-    if (!tokens.access_token) {
-      console.error("OIDC token response does not contain access_token:", tokens);
-      ctx.session.user = null;
-      await ctx.render('error', {
-        'message': 'Authentication failure'
-      });
-      return;
-    }
-
-    const JWKS = jose.createRemoteJWKSet(new URL(`${myconfig.issuer}/jwks`))
-
-    const { payload, protectedHeader } = await jose.jwtVerify(tokens.access_token, JWKS)
-    console.log(payload)
-    // const claims = tokens.claims();
+    const claims = tokens.claims();
     ctx.session.user = {
-    //     name: claims.name,
-        email: payload.email,
-        sub: payload.sub
+        name: claims.name,
+        email: claims.email,
+        sub: claims.sub
     };
     ctx.session.tokens = tokens;
-
     ctx.redirect(`${prefix}`);
   });
 
