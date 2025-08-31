@@ -22,6 +22,17 @@ const client = {
   token_endpoint_auth_method: 'client_secret_basic',
 };
 
+const nativeClient = {
+    client_id: 'org.test.app',
+    application_type: 'native',
+    grant_types: ['authorization_code'],
+    response_types: ['code'],
+    redirect_uris: ['org.test.app://auth'],
+    token_endpoint_auth_method: 'none',
+}
+
+export const clients = [client, nativeClient];
+
 async function provisionClient() {
 
   const Client = sequelize.define('_oidc_Clients', {
@@ -32,13 +43,14 @@ async function provisionClient() {
   });
 
   await sequelize.sync();
-  await Client.upsert({ 
-    id: client.client_id,
-    data: client,
-    createdAt: Sequelize.NOW,
-    updatedAt: Sequelize.NOW
-  });
-
+  for (const c of clients) {
+    await Client.upsert({
+      id: c.client_id,
+      data: c,
+      createdAt: Sequelize.NOW,
+      updatedAt: Sequelize.NOW
+    });
+  }
 }
 
 async function main() {
