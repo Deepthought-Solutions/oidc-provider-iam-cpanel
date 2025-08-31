@@ -79,7 +79,7 @@ export async function startMyClient(myconfig) {
     //   redirect_uri: myconfig.client.redirect_uris[0],
     // });
 
-    const authorizationUrl = new URL(`${myconfig.issuer}/auth`);
+    const authorizationUrl = new URL('auth', myconfig.issuer);
     authorizationUrl.searchParams.set('client_id', myconfig.client.client_id);
     authorizationUrl.searchParams.set('response_type', 'code');
     authorizationUrl.searchParams.set('scope', 'openid email profile');
@@ -115,7 +115,8 @@ export async function startMyClient(myconfig) {
     params.append('client_id', myconfig.client.client_id);
     params.append('client_secret', myconfig.client.client_secret);
 
-    const response = await fetch(`${myconfig.issuer}/token`, {
+    const tokenUrl = new URL('token', myconfig.issuer);
+    const response = await fetch(tokenUrl, {
       method: 'POST',
       body: params,
       // headers: {
@@ -143,7 +144,8 @@ export async function startMyClient(myconfig) {
       return;
     }
 
-    const JWKS = jose.createRemoteJWKSet(new URL(`${myconfig.issuer}/jwks`))
+    const jwksUrl = new URL('jwks', myconfig.issuer);
+    const JWKS = jose.createRemoteJWKSet(jwksUrl);
 
     const { payload, protectedHeader } = await jose.jwtVerify(tokens.access_token, JWKS)
     console.log(payload)
@@ -272,6 +274,10 @@ export async function startMyClient(myconfig) {
     });
   });
 
+
+  router.get('/health', (ctx) => {
+    ctx.status = 200;
+  });
 
   app.use(router.routes());
   app.use(notfound);
