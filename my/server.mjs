@@ -50,14 +50,14 @@ export async function startMyClient(myconfig) {
   app.keys = ['some secret hurr'];
   app.use(session(app));
   app.use(koaBody());
-
-  render(app, {
+  let render_params = myconfig.render_params || {
     root: path.join(desm(import.meta.url), 'views'),
     layout: '_layout',
     viewExt: 'ejs',
     cache: false,
     debug: true,
-  });
+  }
+  render(app, render_params);
 
   let code_verifier;
 
