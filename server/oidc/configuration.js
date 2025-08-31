@@ -13,6 +13,7 @@ import { userInfo } from 'node:os';
 import Account from './account.js';
 // dotenv.config();
 
+
 export async function getConfiguredClients() {
       const Client = sequelize.model('_oidc_Clients');
       const clients = await Client.findAll({ where: { data: { [Sequelize.Op.ne]: null } } });
@@ -159,5 +160,46 @@ export default {
     jwks: jwks,
     formats: {
       AccessToken: 'jwt',
+    },
+    clientBasedCORS(ctx, origin, client) {
+      console.log("Start clientBasedCORS")
+      // console.log(client)
+      try {      
+      if (client 
+          && client.redirectUris.some(uri => uri.startsWith(`${client.clientId}://`))
+          && origin.startsWith("http://localhost")
+        ) {
+        console.log(`Allow ${origin} for ${client.clientId}`)
+        return true;
+      }
+      // Exemple : autoriser uniquement si l'origine est dans les redirect_uris
+      if (client && client.redirectUris.some(uri => uri.startsWith(origin))) {
+        console.log(`Allow ${origin} for ${client.clientId}`)
+        return true;
+      }
+      } catch (e) {
+        console.log(e);
+      }
+      console.log(`Deny ${origin} for ${client.clientId}`)
+      return false;
+    },
+    extraClientMetadata: {
+      properties: ['redirect_uris'],
+      validator: function (ctx, key, value, metadata) {
+        console.log("Validator for extraClientMetadata started")
+        console.log(metadata)
+        if (key === 'redirect_uris') {
+          value.forEach((uri) => {
+            if (uri.startsWith(`${metadata.client_id}://`)) {
+              return;
+            }
+            // sinon, impose qu’on reste sur du http(s)
+            if (!/^https?:\/\//.test(uri)) {
+              throw new Error(`redirect_uri non autorisé: ${uri}`);
+            }
+          });
+        }
+        return value;
+      }
     }
   };
