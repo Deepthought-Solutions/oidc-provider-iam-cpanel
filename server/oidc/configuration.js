@@ -161,3 +161,67 @@ export default {
       AccessToken: 'jwt',
     }
   };
+
+async function tokenExchangeHandler(ctx, next) {
+  const { subject_token, subject_token_type } = ctx.oidc.params;
+
+  if (subject_token_type !== 'urn:ietf:params:oauth:token-type:access_token') {
+    ctx.throw(400, 'invalid_request', { error_description: 'subject_token_type must be an access_token' });
+  }
+
+  const { oidc: { provider } } = ctx;
+  const JWKS = jose.createLocalJWKSet(provider.configuration().jwks);
+
+  let accountId;
+  try {
+    const { payload } = await jose.jwtVerify(subject_token, JWKS);
+    accountId = payload.sub;
+  } catch (err) {
+    console.error(err);
+    ctx.throw(400, 'invalid_grant', { error_description: 'subject_token is invalid' });
+  }
+
+  if (!accountId) {
+    ctx.throw(400, 'invalid_grant', { error_description: 'could not extract account from subject_token' });
+  }
+
+  const AccessToken = provider.AccessToken;
+  const token = new AccessToken({
+    accountId,
+    clientId: ctx.oidc.client.clientId,
+    grantId: ctx.oidc.grantId,
+    scope: ctx.oidc.params.scope || ctx.oidc.client.scope,
+  });
+
+  const accessToken = await token.save();
+
+  ctx.body = {
+    access_token: accessToken,
+    expires_in: token.expiration,
+    token_type: 'Bearer',
+    scope: token.scope,
+  };
+
+  return next();
+}
+
+export function registerGrantTypes(provider) {
+  const parameters = [
+    "audience",
+    "resource",
+    "scope",
+    "requested_token_type",
+    "subject_token",
+    "subject_token_type",
+    "actor_token",
+    "actor_token_type",
+  ];
+  const allowedDuplicateParameters = ["audience", "resource"];
+  const grantType = "urn:ietf:params:oauth:grant-type:token-exchange";
+  provider.registerGrantType(
+      grantType,
+      tokenExchangeHandler,
+      parameters,
+      allowedDuplicateParameters
+  );
+}

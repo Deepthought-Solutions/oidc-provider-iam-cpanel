@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import routes from './oidc/routes.js';
 import configuration from './oidc/configuration.js';
-import { getConfiguredClients } from './oidc/configuration.js';
+import { getConfiguredClients, registerGrantTypes } from './oidc/configuration.js';
 import SequelizeAdapter, { sequelize } from './oidc/db_adapter.js';
 import fs from 'node:fs';
 
@@ -87,6 +87,7 @@ export function startServer() {
     configuration.clients = await getConfiguredClients()
     console.log(`starting issuer ${provider_uri}`)
     const provider = new Provider(provider_uri, { ...configuration });
+    registerGrantTypes(provider);
     // provider.on("grant.success", (ctx) => {
     // provider.on("access_token.issued", (accessToken) => {
     //   console.log(accessToken);
