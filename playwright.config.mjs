@@ -6,9 +6,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npm install && node test/run.mjs',
-      url: 'http://localhost:3001',
-      reuseExistingServer: !process.env.CI,
+      command: 'node test/run.mjs',
+      url: 'http://localhost:3001/health',
+      reuseExistingServer: false,
       timeout: 120 * 1000,
       env: {
         // DEBUG: 'pw:webserver',

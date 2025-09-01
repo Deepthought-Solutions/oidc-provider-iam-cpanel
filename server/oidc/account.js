@@ -289,18 +289,45 @@ export class Account {
   static authenticate(login, password) {
     console.debug(`Authenticate start, requested login:${login}`);
 
-    if (process.env.NODE_ENV === 'test' && login === 'test' && password === 'test') {
-      console.debug(`Test mode: authenticating 'test' user without UAPI`);
-      return new Promise((resolve, reject) => {
-        accountTable.findOrCreate({
-          where: { email: login },
-          defaults: { email: login }
-        })
-        .then(([account]) => {
-          resolve(new Account(account));
-        })
-        .catch(err => reject(err));
-      });
+    if (process.env.NODE_ENV === 'test') {
+      if (login === 'test' && password === 'test') {
+        console.debug(`Test mode: authenticating 'test' user without UAPI`);
+        return new Promise((resolve, reject) => {
+          accountTable.findOrCreate({
+            where: { email: login },
+            defaults: { email: login }
+          })
+          .then(([account]) => {
+            resolve(new Account(account));
+          })
+          .catch(err => reject(err));
+        });
+      }
+
+      if (login === 'user@example.com') {
+        if (password !== 'password') {
+          console.warn(`UAPI mock: authentication failed for user: ${login}`);
+          return Promise.reject('AuthenticationException');
+        }
+        console.debug(`UAPI mock: authenticating '${login}' user`);
+        return new Promise((resolve, reject) => {
+          accountTable.findOrCreate({
+            where: { email: login },
+            defaults: { email: login }
+          })
+          .then(([account, created]) => {
+            if (created) {
+              console.debug(`New account created for email: ${login}`);
+            }
+            console.debug('UAPI Authentication successful');
+            resolve(new Account(account));
+          })
+          .catch(dbError => {
+            console.error('Database error during UAPI mock authentication:', dbError);
+            reject('DatabaseException');
+          });
+        });
+      }
     }
 
     return new Promise((resolve, reject) => {
