@@ -189,7 +189,7 @@ export default {
       return false;
     },
     extraClientMetadata: {
-      properties: ['redirect_uris'],
+      properties: [],
       validator: function (ctx, key, value, metadata) {
         console.log("Validator for extraClientMetadata started")
         console.log(metadata)
