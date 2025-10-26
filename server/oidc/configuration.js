@@ -193,12 +193,12 @@ export default {
       validator: function (ctx, key, value, metadata) {
         console.log("Validator for extraClientMetadata started")
         console.log(metadata)
-        if (key === 'redirect_uris') {
+        if (key === 'redirect_uris' && value) {
           value.forEach((uri) => {
             if (uri.startsWith(`${metadata.client_id}://`)) {
               return;
             }
-            // sinon, impose qu’on reste sur du http(s)
+            // sinon, impose qu'on reste sur du http(s)
             if (!/^https?:\/\//.test(uri)) {
               throw new Error(`redirect_uri non autorisé: ${uri}`);
             }
