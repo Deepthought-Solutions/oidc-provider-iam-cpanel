@@ -3,6 +3,9 @@ import * as OTPAuth from "otpauth";
 import { randomBytes } from 'crypto';
 import crypto from 'crypto';
 
+// Store TOTP secret for reuse across tests
+let testUserTotpSecret = null;
+
 test('enrollment flow', async ({ page }) => {
   // Go to the test client
   await page.goto('http://localhost:3001/login');
@@ -21,6 +24,9 @@ test('enrollment flow', async ({ page }) => {
   // Extract the TOTP secret from the QR code
   const otpauthUri = await page.locator('img').getAttribute('data-uri');
   const totp = OTPAuth.URI.parse(otpauthUri);
+
+  // Save the secret for use in other tests
+  testUserTotpSecret = totp;
 
   // Fill in the TOTP form with a valid token
   await page.fill('input[name="token"]', totp.generate());
@@ -162,4 +168,138 @@ test('failed uapi authentication', async ({ page }) => {
   await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
   const error = await page.textContent('p[style="color: red;"]');
   expect(error).toContain('Invalid credentials');
+});
+
+test('device flow authentication without redirect_uri', async ({ request }) => {
+  // 1. Request device authorization
+  const deviceAuthUrl = 'http://localhost:3080/device/auth';
+  const deviceResponse = await request.post(deviceAuthUrl, {
+    form: {
+      client_id: 'llm-mail-sorter',
+      scope: 'openid email profile',
+    },
+  });
+
+  expect(deviceResponse.ok(), `Device authorization failed: ${await deviceResponse.text()}`).toBe(true);
+  const deviceData = await deviceResponse.json();
+
+  expect(deviceData).toHaveProperty('device_code');
+  expect(deviceData).toHaveProperty('user_code');
+  expect(deviceData).toHaveProperty('verification_uri');
+  expect(deviceData).toHaveProperty('expires_in');
+
+  console.log('Device code response:', deviceData);
+});
+
+test('device flow complete authentication flow', async ({ page, request }) => {
+  // 1. Request device authorization
+  const deviceAuthUrl = 'http://localhost:3080/device/auth';
+  const deviceResponse = await request.post(deviceAuthUrl, {
+    form: {
+      client_id: 'llm-mail-sorter',
+      scope: 'openid email profile',
+    },
+  });
+
+  expect(deviceResponse.ok(), `Device authorization failed: ${await deviceResponse.text()}`).toBe(true);
+  const deviceData = await deviceResponse.json();
+
+  const { device_code, user_code, verification_uri } = deviceData;
+
+  // 2. User navigates to verification URI and enters user code
+  const verificationUrl = `${verification_uri}?user_code=${user_code}`;
+  await page.goto(verificationUrl);
+
+  // 3. Expect to be on device confirmation page, then confirm
+  await expect(page).toHaveURL(/.*localhost:3080\/device.*/);
+
+  // Look for and click the confirm/continue button on the device page
+  const confirmButton = page.locator('button[type="submit"], form[method="post"] button');
+  if (await confirmButton.count() > 0) {
+    await confirmButton.first().click();
+  }
+
+  // 4. User logs in (after confirming device)
+  await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
+
+  // Use test credentials (test/test works in test mode)
+  await page.fill('input[name="login"]', 'test');
+  await page.fill('input[name="password"]', 'test');
+  await page.click('button[type="submit"]');
+
+  // 5. Handle TOTP (enrollment if first time, verification if already enrolled)
+  await page.waitForURL(/.*localhost:3080\/interaction\/.*/, { timeout: 10000 });
+
+  const currentUrl = page.url();
+  if (currentUrl.includes('/totp')) {
+    // Check if there's a QR code (enrollment) or just a token input (verification)
+    const qrCode = page.locator('img[data-uri]');
+    const qrCodeCount = await qrCode.count();
+
+    if (qrCodeCount > 0) {
+      // Enrollment case: scan QR and save secret
+      const otpauthUri = await qrCode.getAttribute('data-uri');
+      const totp = OTPAuth.URI.parse(otpauthUri);
+      testUserTotpSecret = totp; // Save for future tests
+      await page.fill('input[name="token"]', totp.generate());
+      await page.click('button[type="submit"]');
+    } else if (testUserTotpSecret) {
+      // Verification case: use saved secret
+      await page.fill('input[name="token"]', testUserTotpSecret.generate());
+      await page.click('button[type="submit"]');
+    } else {
+      throw new Error('TOTP verification required but no secret available');
+    }
+  }
+
+  // 6. Handle consent
+  await page.waitForURL(/.*localhost:3080\/interaction\/.*/, { timeout: 5000 });
+
+  // Submit consent form
+  const consentButton = page.locator('button[type="submit"]').first();
+  await consentButton.click();
+
+  // 7. Wait for completion - should redirect to success page or close
+  await page.waitForTimeout(3000); // Give time for the authorization to complete
+
+  // 8. Poll the token endpoint
+  const tokenUrl = 'http://localhost:3080/token';
+  let tokenData;
+  let attempts = 0;
+  const maxAttempts = 15;
+
+  while (attempts < maxAttempts) {
+    const tokenResponse = await request.post(tokenUrl, {
+      form: {
+        client_id: 'llm-mail-sorter',
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: device_code,
+      },
+    });
+
+    tokenData = await tokenResponse.json();
+
+    if (tokenResponse.ok()) {
+      console.log('Token retrieved successfully on attempt', attempts + 1);
+      break;
+    }
+
+    if (tokenData.error === 'authorization_pending') {
+      console.log(`Attempt ${attempts + 1}: Authorization still pending...`);
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      attempts++;
+      continue;
+    }
+
+    // If we get any other error, fail the test
+    console.error('Token exchange error:', tokenData);
+    expect(tokenResponse.ok(), `Token exchange failed: ${JSON.stringify(tokenData)}`).toBe(true);
+    break;
+  }
+
+  // 8. Assert token response
+  expect(tokenData).toHaveProperty('access_token');
+  expect(tokenData).toHaveProperty('id_token');
+  expect(tokenData).toHaveProperty('token_type', 'Bearer');
 });

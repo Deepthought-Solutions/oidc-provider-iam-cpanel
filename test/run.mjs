@@ -31,7 +31,16 @@ const nativeClient = {
     token_endpoint_auth_method: 'none',
 }
 
-export const clients = [client, nativeClient];
+const deviceFlowClient = {
+    client_id: 'llm-mail-sorter',
+    application_type: 'native',
+    grant_types: ['refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
+    redirect_uris: [],
+    response_types: [],
+    token_endpoint_auth_method: 'none',
+}
+
+export const clients = [client, nativeClient, deviceFlowClient];
 
 async function provisionClient() {
 
