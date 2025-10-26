@@ -164,16 +164,21 @@ export default {
     clientBasedCORS(ctx, origin, client) {
       console.log("Start clientBasedCORS")
       // console.log(client)
-      try {      
-      if (client 
-          && client.redirectUris.some(uri => uri.startsWith(`${client.clientId}://`))
+      try {
+      // Device code clients don't have redirectUris
+      if (!client || !client.redirectUris) {
+        console.log(`No redirectUris for ${client?.clientId}, denying CORS`)
+        return false;
+      }
+
+      if (client.redirectUris.some(uri => uri.startsWith(`${client.clientId}://`))
           && origin.startsWith("http://localhost")
         ) {
         console.log(`Allow ${origin} for ${client.clientId}`)
         return true;
       }
       // Exemple : autoriser uniquement si l'origine est dans les redirect_uris
-      if (client && client.redirectUris.some(uri => uri.startsWith(origin))) {
+      if (client.redirectUris.some(uri => uri.startsWith(origin))) {
         console.log(`Allow ${origin} for ${client.clientId}`)
         return true;
       }
