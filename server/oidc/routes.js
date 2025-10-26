@@ -10,10 +10,11 @@ import { koaBody as bodyParser } from 'koa-body';
 import Router from '@koa/router';
 import * as qrcode from 'qrcode';
 
-import * as helpers from './helpers.js'; 
+import * as helpers from './helpers.js';
 import * as totp from './totp.js';
 import Account from './account.js';
 import { errors } from 'oidc-provider';
+import * as upstreamProviders from './upstream_providers.js';
 
 const hkdf = promisify(crypto.hkdf);
 const keys = new Set();
@@ -61,6 +62,9 @@ export default (provider) => {
 
     switch (prompt.name) {
       case 'login': {
+        // Fetch enabled upstream providers
+        const enabledProviders = await upstreamProviders.getEnabledProviders();
+
         return ctx.render('login', {
           client,
           uid,
@@ -68,6 +72,7 @@ export default (provider) => {
           params,
           title: 'Sign-in',
           google,
+          upstreamProviders: enabledProviders,
           session: session ? debug(session) : undefined,
           dbg: {
             params: debug(params),
@@ -252,69 +257,216 @@ export default (provider) => {
     }
   });
 
-  const ENABLE_FEDERATED_ROUTES = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
-  if (ENABLE_FEDERATED_ROUTES) {
-    const GOOGLE_CALLBACK_PATHNAME = '/interaction/callback/google';
-    const federatedLogin = async (ctx) => {
-      const { prompt: { name } } = await provider.interactionDetails(ctx.req, ctx.res);
-      assert.equal(name, 'login');
+  // Dynamic federated provider routes
+  // POST /interaction/:uid/federated - Initiate federation with selected provider
+  router.post('/interaction/:uid/federated', body, async (ctx) => {
+    const { prompt: { name } } = await provider.interactionDetails(ctx.req, ctx.res);
+    assert.equal(name, 'login');
 
-      switch (ctx.method === 'POST' ? ctx.request.body.upstream : ctx.query.upstream) {
-        case 'google': {
-          const code_verifier = Buffer.from(
-            await hkdf(
-              'sha256',
-              process.env.GOOGLE_CLIENT_SECRET,
-              ctx.params.uid,
-              process.env.GOOGLE_CLIENT_ID,
-              32,
-            ),
-          ).toString('base64url');
+    const providerName = ctx.request.body.provider;
+    if (!providerName) {
+      ctx.status = 400;
+      ctx.body = { error: 'Provider not specified' };
+      return;
+    }
 
-          if (ctx.method === 'POST') {
-            ctx.status = 303;
-            return ctx.redirect(oidc.buildAuthorizationUrl(google, {
-              redirect_uri: new URL(GOOGLE_CALLBACK_PATHNAME, ctx.request.URL.origin),
-              scope: 'openid email profile',
-              code_challenge: await oidc.calculatePKCECodeChallenge(code_verifier),
-              code_challenge_method: 'S256',
-              state: ctx.params.uid,
-            }));
-          }
+    const providerConfig = await upstreamProviders.getProvider(providerName);
+    if (!providerConfig) {
+      ctx.status = 404;
+      ctx.body = { error: 'Provider not found or disabled' };
+      return;
+    }
 
-          const url = new URL(ctx.request.URL);
-          url.pathname = GOOGLE_CALLBACK_PATHNAME;
-          const tokens = await oidc.authorizationCodeGrant(google, url, {
-            pkceCodeVerifier: code_verifier,
-            idTokenExpected: true,
-            expectedState: ctx.params.uid,
-          });
+    // Generate PKCE code verifier using HKDF
+    const code_verifier = Buffer.from(
+      await hkdf(
+        'sha256',
+        providerConfig.client_secret || 'default-secret',
+        ctx.params.uid,
+        providerConfig.client_id,
+        32,
+      ),
+    ).toString('base64url');
 
-          const account = await Account.findByFederated('google', tokens.claims());
+    // Store code_verifier in session for later retrieval
+    // Using interaction UID as the key
+    if (!ctx.session) {
+      ctx.session = {};
+    }
+    ctx.session[`pkce_${ctx.params.uid}`] = code_verifier;
+    ctx.session[`provider_${ctx.params.uid}`] = providerName;
 
-          const result = {
-            login: {
-              accountId: account.accountId,
-            },
-          };
-          return provider.interactionFinished(ctx.req, ctx.res, result, {
-            mergeWithLastSubmission: false,
-          });
-        }
-        default:
-          return undefined;
-      }
+    const callbackUrl = new URL(`/interaction/callback/${providerName}`, ctx.request.URL.origin);
+    const client = await upstreamProviders.initializeClient(providerConfig, callbackUrl.toString());
+
+    const authUrl = await upstreamProviders.buildAuthorizationUrl(
+      client,
+      callbackUrl.toString(),
+      ctx.params.uid, // state
+      code_verifier
+    );
+
+    ctx.status = 303;
+    ctx.redirect(authUrl);
+  });
+
+  // GET /interaction/callback/:provider - Callback from upstream provider
+  router.get('/interaction/callback/:provider', async (ctx) => {
+    const providerName = ctx.params.provider;
+
+    // Redirect to federated handler with state (interaction UID)
+    const target = new URL(ctx.request.URL);
+    target.pathname = `/interaction/${ctx.query.state}/federated/${providerName}`;
+    ctx.redirect(target);
+  });
+
+  // GET /interaction/:uid/federated/:provider - Handle callback and complete auth
+  router.get('/interaction/:uid/federated/:provider', async (ctx) => {
+    const { prompt: { name } } = await provider.interactionDetails(ctx.req, ctx.res);
+    assert.equal(name, 'login');
+
+    const providerName = ctx.params.provider;
+    const providerConfig = await upstreamProviders.getProvider(providerName);
+
+    if (!providerConfig) {
+      ctx.status = 404;
+      ctx.body = { error: 'Provider not found' };
+      return;
+    }
+
+    // Retrieve code_verifier from session
+    const code_verifier = ctx.session?.[`pkce_${ctx.params.uid}`];
+    if (!code_verifier) {
+      ctx.status = 400;
+      ctx.body = { error: 'PKCE verifier not found in session' };
+      return;
+    }
+
+    const callbackUrl = new URL(`/interaction/callback/${providerName}`, ctx.request.URL.origin);
+    const client = await upstreamProviders.initializeClient(providerConfig, callbackUrl.toString());
+
+    // Exchange code for tokens
+    const tokenResult = await upstreamProviders.exchangeCode(
+      client,
+      callbackUrl.toString(),
+      ctx.query,
+      code_verifier,
+      ctx.params.uid
+    );
+
+    // Clean up session
+    delete ctx.session[`pkce_${ctx.params.uid}`];
+    delete ctx.session[`provider_${ctx.params.uid}`];
+
+    // Find or create account from federated identity
+    const { account, requiresVerification } = await Account.findByFederated(
+      providerName,
+      tokenResult.claims
+    );
+
+    if (requiresVerification) {
+      // Store federated claims in session for verification
+      ctx.session[`federated_claims_${ctx.params.uid}`] = {
+        provider: providerName,
+        claims: tokenResult.claims,
+        accountId: account.accountId,
+      };
+
+      // Redirect to verification page
+      return ctx.redirect(`/interaction/${ctx.params.uid}/federated/verify`);
+    }
+
+    // No verification needed - complete interaction
+    const result = {
+      login: {
+        accountId: account.accountId,
+      },
     };
 
-    router.get(GOOGLE_CALLBACK_PATHNAME, (ctx) => {
-      const target = new URL(ctx.request.URL);
-      target.pathname = `/interaction/${ctx.query.state}/federated`;
-      target.searchParams.set('upstream', 'google');
-      ctx.redirect(target);
+    return provider.interactionFinished(ctx.req, ctx.res, result, {
+      mergeWithLastSubmission: false,
     });
-    router.get('/interaction/:uid/federated', body, federatedLogin);
-    router.post('/interaction/:uid/federated', body, federatedLogin);
-  }
+  });
+
+  // GET /interaction/:uid/federated/verify - Show verification form for owned domains
+  router.get('/interaction/:uid/federated/verify', async (ctx) => {
+    const { uid, prompt, params, session } = await provider.interactionDetails(ctx.req, ctx.res);
+    const client = await provider.Client.find(params.client_id);
+
+    const federatedData = ctx.session?.[`federated_claims_${uid}`];
+    if (!federatedData) {
+      ctx.status = 400;
+      ctx.body = { error: 'No pending federated verification' };
+      return;
+    }
+
+    return ctx.render('federated_verify', {
+      client,
+      uid,
+      details: prompt.details,
+      params,
+      title: 'Verify Account Ownership',
+      provider: federatedData.provider,
+      email: federatedData.claims.email,
+      error: null,
+      session: session ? debug(session) : undefined,
+    });
+  });
+
+  // POST /interaction/:uid/federated/verify - Verify ownership with password
+  router.post('/interaction/:uid/federated/verify', body, async (ctx) => {
+    const { password } = ctx.request.body;
+    const { uid, prompt, params, session } = await provider.interactionDetails(ctx.req, ctx.res);
+    const client = await provider.Client.find(params.client_id);
+
+    const federatedData = ctx.session?.[`federated_claims_${uid}`];
+    if (!federatedData) {
+      ctx.status = 400;
+      ctx.body = { error: 'No pending federated verification' };
+      return;
+    }
+
+    try {
+      // Verify password for the account
+      const account = await Account.authenticate(
+        federatedData.claims.email,
+        password
+      );
+
+      // Verify federated identity
+      await Account.verifyFederatedIdentity(
+        account.accountId,
+        federatedData.provider,
+        federatedData.claims.sub
+      );
+
+      // Clean up session
+      delete ctx.session[`federated_claims_${uid}`];
+
+      // Complete interaction
+      const result = {
+        login: {
+          accountId: account.accountId,
+        },
+      };
+
+      return provider.interactionFinished(ctx.req, ctx.res, result, {
+        mergeWithLastSubmission: false,
+      });
+    } catch (err) {
+      return ctx.render('federated_verify', {
+        client,
+        uid,
+        details: prompt.details,
+        params,
+        title: 'Verify Account Ownership',
+        provider: federatedData.provider,
+        email: federatedData.claims.email,
+        error: { message: 'Invalid password. Please try again.' },
+        session: session ? debug(session) : undefined,
+      });
+    }
+  });
 
   router.post('/interaction/:uid/confirm', body, async (ctx) => {
     const interactionDetails = await provider.interactionDetails(ctx.req, ctx.res);

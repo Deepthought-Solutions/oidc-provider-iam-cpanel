@@ -284,7 +284,10 @@ export async function startMyClient(myconfig) {
 
 
 
-  app.listen(myconfig.port, () => {
-    console.log(`My client server listening on port ${myconfig.port}`);
+  return new Promise((resolve) => {
+    app.listen(myconfig.port, () => {
+      console.log(`My client server listening on port ${myconfig.port}`);
+      resolve();
+    });
   });
 }

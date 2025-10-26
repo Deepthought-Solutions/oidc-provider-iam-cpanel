@@ -6,6 +6,7 @@ import { sequelize } from "./db_adapter.js";
 import nodemailer from "nodemailer";
 import { v4 as uuidv4 } from 'uuid';
 import { TotpSecret } from "./totp.js";
+import { isOwnedDomain } from "./domain_verification.js";
 
 // dotenv.config();
 
@@ -38,12 +39,64 @@ export const accountTable = sequelize.define("accounts",{
 // }
 );
 
+// FederatedIdentity model for linking external provider accounts
+export const FederatedIdentity = sequelize.define('federated_identities', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  account_uid: {
+    type: DataTypes.UUID,
+    allowNull: false,
+  },
+  provider_name: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+  },
+  provider_subject: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+  },
+  provider_email: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
+  claims_json: {
+    type: DataTypes.JSON,
+    allowNull: true,
+  },
+  verified: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
+  last_used_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+}, {
+  tableName: 'federated_identities',
+  underscored: true,
+  timestamps: true,
+});
+
 accountTable.hasOne(TotpSecret, {
   foreignKey: 'account_uid',
   sourceKey: 'uid',
   as: 'totpSecret'
 });
 TotpSecret.belongsTo(accountTable, {
+  foreignKey: 'account_uid',
+  targetKey: 'uid'
+});
+
+accountTable.hasMany(FederatedIdentity, {
+  foreignKey: 'account_uid',
+  sourceKey: 'uid',
+  as: 'federatedIdentities'
+});
+FederatedIdentity.belongsTo(accountTable, {
   foreignKey: 'account_uid',
   targetKey: 'uid'
 });
@@ -157,13 +210,167 @@ export class Account {
 
   }
 
-  // static async findByFederated(provider, claims) {
-  //   const id = `${provider}.${claims.sub}`;
-  //   if (!logins.get(id)) {
-  //     logins.set(id, new Account(id, claims));
-  //   }
-  //   return logins.get(id);
-  // }
+  /**
+   * Find or create account from federated identity provider
+   *
+   * Security rules:
+   * - External domains: Auto-create account, trust IdP verification
+   * - Owned domains: Require additional verification to prevent takeover
+   *
+   * @param {string} providerName - Provider identifier (e.g., "linkedin", "google")
+   * @param {Object} claims - Claims from provider (must include sub, email)
+   * @returns {Promise<{account: Account, requiresVerification: boolean}>}
+   */
+  static async findByFederated(providerName, claims) {
+    console.debug(`Find by federated: provider=${providerName}, sub=${claims.sub}, email=${claims.email}`);
+
+    if (!claims.sub) {
+      throw new Error('Federated claims must include "sub" (subject)');
+    }
+
+    if (!claims.email) {
+      throw new Error('Federated claims must include "email"');
+    }
+
+    // Check if this federated identity already exists
+    const existingIdentity = await FederatedIdentity.findOne({
+      where: {
+        provider_name: providerName,
+        provider_subject: claims.sub,
+      },
+    });
+
+    if (existingIdentity) {
+      console.debug(`Found existing federated identity for ${providerName}:${claims.sub}`);
+
+      // Update last used timestamp
+      await existingIdentity.update({
+        last_used_at: new Date(),
+        claims_json: claims,
+      });
+
+      // Get the linked account
+      const account = await accountTable.findOne({
+        where: { uid: existingIdentity.account_uid },
+      });
+
+      if (!account) {
+        throw new Error('Linked account not found');
+      }
+
+      // If already verified, return immediately
+      if (existingIdentity.verified) {
+        return {
+          account: new Account(account),
+          requiresVerification: false,
+        };
+      }
+
+      // Still requires verification (owned domain not yet verified)
+      return {
+        account: new Account(account),
+        requiresVerification: true,
+      };
+    }
+
+    // New federated identity - check if email domain is owned
+    const emailIsOwned = await isOwnedDomain(claims.email);
+
+    console.debug(`Email domain owned: ${emailIsOwned}`);
+
+    if (emailIsOwned) {
+      // Owned domain - requires verification before linking
+      // Check if account with this email already exists
+      const existingAccount = await accountTable.findOne({
+        where: { email: claims.email },
+      });
+
+      if (existingAccount) {
+        // Account exists - create unverified federated identity link
+        console.debug(`Account exists for owned domain email, creating unverified link`);
+
+        await FederatedIdentity.create({
+          account_uid: existingAccount.uid,
+          provider_name: providerName,
+          provider_subject: claims.sub,
+          provider_email: claims.email,
+          claims_json: claims,
+          verified: false,
+          last_used_at: new Date(),
+        });
+
+        return {
+          account: new Account(existingAccount),
+          requiresVerification: true,
+        };
+      } else {
+        // No account exists - cannot auto-create for owned domain
+        throw new Error('OWNED_DOMAIN_ACCOUNT_NOT_FOUND');
+      }
+    } else {
+      // External domain - auto-create account and link
+      console.debug(`External domain, auto-creating account`);
+
+      // Check if account with this email already exists
+      let account = await accountTable.findOne({
+        where: { email: claims.email },
+      });
+
+      if (!account) {
+        // Create new account
+        account = await accountTable.create({
+          email: claims.email,
+          password: null, // Federated accounts don't need passwords
+        });
+        console.debug(`Created new account for federated user: ${account.uid}`);
+      } else {
+        console.debug(`Linking federated identity to existing account: ${account.uid}`);
+      }
+
+      // Create verified federated identity link
+      await FederatedIdentity.create({
+        account_uid: account.uid,
+        provider_name: providerName,
+        provider_subject: claims.sub,
+        provider_email: claims.email,
+        claims_json: claims,
+        verified: true,
+        last_used_at: new Date(),
+      });
+
+      return {
+        account: new Account(account),
+        requiresVerification: false,
+      };
+    }
+  }
+
+  /**
+   * Verify and finalize federated identity link for owned domains
+   * Call this after user has proven ownership (e.g., entered password)
+   *
+   * @param {string} accountId - Account UID
+   * @param {string} providerName - Provider identifier
+   * @param {string} providerSubject - Provider subject (sub claim)
+   */
+  static async verifyFederatedIdentity(accountId, providerName, providerSubject) {
+    console.debug(`Verifying federated identity: account=${accountId}, provider=${providerName}`);
+
+    const identity = await FederatedIdentity.findOne({
+      where: {
+        account_uid: accountId,
+        provider_name: providerName,
+        provider_subject: providerSubject,
+      },
+    });
+
+    if (!identity) {
+      throw new Error('Federated identity not found');
+    }
+
+    await identity.update({ verified: true });
+    console.debug(`Federated identity verified successfully`);
+  }
 
   static async findByUID(uid) {
     console.debug(`Find by UID:${uid}`)

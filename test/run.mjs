@@ -61,10 +61,10 @@ async function main() {
 
   await runMigrations();
   await provisionClient();
+  console.log('Starting client server...');
+  await startMyClient({client:client, issuer: providerIssuer, port: port});
   console.log('Starting OIDC provider...');
-  startMyClient({client:client, issuer: providerIssuer, port: port}).then(() => {
-    startServer()
-  })
+  await startServer();
 }
 
 main();

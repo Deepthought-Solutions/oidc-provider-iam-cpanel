@@ -2,12 +2,78 @@
 <html>
 <head>
   <title>Connexion</title>
+  <style>
+    .federated-providers {
+      margin: 30px 0;
+      padding: 20px;
+      border-top: 1px solid #ccc;
+      border-bottom: 1px solid #ccc;
+    }
+    .federated-providers h3 {
+      margin-top: 0;
+      font-size: 14px;
+      color: #666;
+      text-transform: uppercase;
+    }
+    .provider-button {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      text-align: left;
+      transition: background-color 0.2s;
+    }
+    .provider-button:hover {
+      background-color: #f5f5f5;
+    }
+    .provider-button.has-color {
+      color: white;
+      border: none;
+    }
+    .provider-button.has-color:hover {
+      opacity: 0.9;
+    }
+    .divider {
+      text-align: center;
+      margin: 20px 0;
+      color: #666;
+    }
+  </style>
 </head>
 <body>
   <h1>Connexion</h1>
   <% if (locals.error) { %>
     <p style="color: red;"><%= error.message %></p>
   <% } %>
+
+  <% if (locals.upstreamProviders && upstreamProviders.length > 0) { %>
+    <div class="federated-providers">
+      <h3>Se connecter avec</h3>
+      <% upstreamProviders.forEach(function(provider) { %>
+        <form action="/interaction/<%= uid %>/federated" method="post" style="margin: 0;">
+          <input type="hidden" name="provider" value="<%= provider.name %>">
+          <button
+            type="submit"
+            class="provider-button <%= provider.button_color ? 'has-color' : '' %>"
+            <% if (provider.button_color) { %>style="background-color: <%= provider.button_color %>;"<% } %>
+          >
+            <% if (provider.icon_url) { %>
+              <img src="<%= provider.icon_url %>" alt="<%= provider.display_name %>" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">
+            <% } %>
+            Continuer avec <%= provider.display_name %>
+          </button>
+        </form>
+      <% }); %>
+    </div>
+
+    <div class="divider">— ou —</div>
+  <% } %>
+
   <form action="/interaction/<%= uid %>/login" method="post">
     <div>
       <label for="login">Identifiant (Pseudo ou email)</label>

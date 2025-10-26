@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Verify Account Ownership</title>
+  <style>
+    .warning {
+      background-color: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    .warning h3 {
+      margin-top: 0;
+      color: #856404;
+    }
+    .error {
+      color: red;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Verify Account Ownership</h1>
+
+  <div class="warning">
+    <h3>⚠️ Security Verification Required</h3>
+    <p>
+      The email address <strong><%= email %></strong> belongs to a domain managed by this server.
+    </p>
+    <p>
+      To link your <strong><%= provider %></strong> account, you must prove ownership of this local email account.
+    </p>
+  </div>
+
+  <% if (locals.error) { %>
+    <p class="error"><%= error.message %></p>
+  <% } %>
+
+  <form action="/interaction/<%= uid %>/federated/verify" method="post">
+    <div>
+      <label for="password">Enter your account password:</label>
+      <input type="password" name="password" id="password" value="" required autofocus>
+    </div>
+    <button type="submit">Verify and Link Account</button>
+  </form>
+
+  <p>
+    <small>
+      This verification step prevents unauthorized account linking. If you don't have access to this email account,
+      please contact your administrator.
+    </small>
+  </p>
+</body>
+</html>
