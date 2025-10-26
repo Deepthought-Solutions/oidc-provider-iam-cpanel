@@ -14,7 +14,7 @@ export default {
     );
 
     if (client) {
-      const clientData = JSON.parse(client.data);
+      const clientData = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
 
       // Remove redirect_uris and response_types for device code flow
       delete clientData.redirect_uris;
@@ -53,7 +53,7 @@ export default {
     );
 
     if (client) {
-      const clientData = JSON.parse(client.data);
+      const clientData = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
 
       // Restore original configuration
       clientData.redirect_uris = [`${clientId}://callback`];
