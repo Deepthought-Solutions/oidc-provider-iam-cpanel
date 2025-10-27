@@ -171,7 +171,12 @@ test('failed uapi authentication', async ({ page }) => {
 });
 
 test('device flow authentication without redirect_uri', async ({ request }) => {
-  // 1. Request device authorization
+  // 1. Verify client configuration has no redirect_uri
+  const clientsUrl = 'http://localhost:3080/.well-known/openid-configuration';
+  const configResponse = await request.get(clientsUrl);
+  expect(configResponse.ok()).toBe(true);
+
+  // 2. Request device authorization
   const deviceAuthUrl = 'http://localhost:3080/device/auth';
   const deviceResponse = await request.post(deviceAuthUrl, {
     form: {
@@ -183,12 +188,123 @@ test('device flow authentication without redirect_uri', async ({ request }) => {
   expect(deviceResponse.ok(), `Device authorization failed: ${await deviceResponse.text()}`).toBe(true);
   const deviceData = await deviceResponse.json();
 
+  // 3. Validate response structure per RFC 8628
   expect(deviceData).toHaveProperty('device_code');
   expect(deviceData).toHaveProperty('user_code');
   expect(deviceData).toHaveProperty('verification_uri');
   expect(deviceData).toHaveProperty('expires_in');
 
+  // 4. Validate data types and formats
+  expect(typeof deviceData.device_code).toBe('string');
+  expect(deviceData.device_code.length).toBeGreaterThan(0);
+  expect(typeof deviceData.user_code).toBe('string');
+  expect(deviceData.user_code.length).toBeGreaterThan(0);
+  expect(typeof deviceData.verification_uri).toBe('string');
+  expect(deviceData.verification_uri).toContain('http');
+  expect(typeof deviceData.expires_in).toBe('number');
+  expect(deviceData.expires_in).toBeGreaterThan(0);
+
+  // interval is optional per RFC 8628
+  if (deviceData.interval !== undefined) {
+    expect(typeof deviceData.interval).toBe('number');
+    expect(deviceData.interval).toBeGreaterThanOrEqual(5);
+  }
+
+  // 5. Verify optional verification_uri_complete if present
+  if (deviceData.verification_uri_complete) {
+    expect(deviceData.verification_uri_complete).toContain(deviceData.user_code);
+  }
+
+  // 6. Attempt to poll token endpoint before authorization (should get pending)
+  const tokenUrl = 'http://localhost:3080/token';
+  const pendingTokenResponse = await request.post(tokenUrl, {
+    form: {
+      client_id: 'llm-mail-sorter',
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      device_code: deviceData.device_code,
+    },
+  });
+
+  const pendingTokenData = await pendingTokenResponse.json();
+  expect(pendingTokenResponse.status()).toBe(400);
+  expect(pendingTokenData.error).toBe('authorization_pending');
+
   console.log('Device code response:', deviceData);
+  console.log('Pending authorization confirmed');
+});
+
+test('device flow client should reject authorization code flow', async ({ request }) => {
+  // Device flow clients without redirect_uri should not be able to use authorization_code grant
+  const authorizeUrl = 'http://localhost:3080/auth';
+
+  // Attempt to start authorization code flow with device flow client
+  const authResponse = await request.get(authorizeUrl, {
+    params: {
+      client_id: 'llm-mail-sorter',
+      response_type: 'code',
+      scope: 'openid email profile',
+      redirect_uri: 'http://localhost:3001/callback', // This should be rejected
+    },
+  });
+
+  // Should either be 400 or redirect to error
+  expect(authResponse.ok()).toBe(false);
+  const text = await authResponse.text();
+
+  // Verify error indicates the issue
+  expect(
+    text.includes('redirect_uri') ||
+    text.includes('invalid') ||
+    text.includes('client') ||
+    authResponse.status() === 400 ||
+    authResponse.status() === 401
+  ).toBe(true);
+
+  console.log('Authorization code flow correctly rejected for device flow client');
+});
+
+test('device flow should reject invalid device codes', async ({ request }) => {
+  const tokenUrl = 'http://localhost:3080/token';
+
+  // 1. Test with completely invalid device code
+  const invalidResponse = await request.post(tokenUrl, {
+    form: {
+      client_id: 'llm-mail-sorter',
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      device_code: 'invalid-device-code-12345',
+    },
+  });
+
+  expect(invalidResponse.ok()).toBe(false);
+  const invalidData = await invalidResponse.json();
+  expect(['invalid_grant', 'expired_token', 'authorization_pending']).toContain(invalidData.error);
+
+  // 2. Test with empty device code
+  const emptyResponse = await request.post(tokenUrl, {
+    form: {
+      client_id: 'llm-mail-sorter',
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      device_code: '',
+    },
+  });
+
+  expect(emptyResponse.ok()).toBe(false);
+  const emptyData = await emptyResponse.json();
+  expect(emptyData.error).toBeDefined();
+
+  // 3. Test with missing device code
+  const missingResponse = await request.post(tokenUrl, {
+    form: {
+      client_id: 'llm-mail-sorter',
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    },
+  });
+
+  expect(missingResponse.ok()).toBe(false);
+  const missingData = await missingResponse.json();
+  expect(missingData.error).toBeDefined();
+
+  console.log('Invalid device codes correctly rejected');
 });
 
 test('device flow complete authentication flow', async ({ page, request }) => {

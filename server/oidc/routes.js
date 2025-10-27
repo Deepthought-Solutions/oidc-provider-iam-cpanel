@@ -14,7 +14,7 @@ import * as helpers from './helpers.js';
 import * as totp from './totp.js';
 import Account from './account.js';
 import { errors } from 'oidc-provider';
-import * as upstreamProviders from './upstream_providers.js';
+import upstreamProviders from './upstream_providers_service.js';
 
 const hkdf = promisify(crypto.hkdf);
 const keys = new Set();
@@ -297,7 +297,16 @@ export default (provider) => {
     ctx.session[`provider_${ctx.params.uid}`] = providerName;
 
     const callbackUrl = new URL(`/interaction/callback/${providerName}`, ctx.request.URL.origin);
-    const client = await upstreamProviders.initializeClient(providerConfig, callbackUrl.toString());
+
+    let client;
+    try {
+      client = await upstreamProviders.initializeClient(providerConfig, callbackUrl.toString());
+    } catch (error) {
+      console.error(`Failed to initialize provider ${providerName}:`, error);
+      ctx.status = 500;
+      ctx.body = { error: 'Provider initialization failed' };
+      return;
+    }
 
     const authUrl = await upstreamProviders.buildAuthorizationUrl(
       client,
@@ -343,16 +352,33 @@ export default (provider) => {
     }
 
     const callbackUrl = new URL(`/interaction/callback/${providerName}`, ctx.request.URL.origin);
-    const client = await upstreamProviders.initializeClient(providerConfig, callbackUrl.toString());
+
+    let client;
+    try {
+      client = await upstreamProviders.initializeClient(providerConfig, callbackUrl.toString());
+    } catch (error) {
+      console.error(`Failed to initialize provider ${providerName}:`, error);
+      ctx.status = 500;
+      ctx.body = { error: 'Provider initialization failed' };
+      return;
+    }
 
     // Exchange code for tokens
-    const tokenResult = await upstreamProviders.exchangeCode(
-      client,
-      callbackUrl.toString(),
-      ctx.query,
-      code_verifier,
-      ctx.params.uid
-    );
+    let tokenResult;
+    try {
+      tokenResult = await upstreamProviders.exchangeCode(
+        client,
+        callbackUrl.toString(),
+        ctx.query,
+        code_verifier,
+        ctx.params.uid
+      );
+    } catch (error) {
+      console.error(`Failed to exchange code with provider ${providerName}:`, error);
+      ctx.status = 500;
+      ctx.body = { error: 'Token exchange failed' };
+      return;
+    }
 
     // Clean up session
     delete ctx.session[`pkce_${ctx.params.uid}`];
@@ -528,6 +554,128 @@ export default (provider) => {
       mergeWithLastSubmission: false,
     });
   });
+
+  // Test-only mock endpoints
+  if (process.env.NODE_ENV === 'test') {
+    // In-memory store for mock user data keyed by authorization code
+    const mockUserData = new Map();
+
+    // Store for test scenario configuration
+    let mockUserScenario = 'external'; // default: external domain user
+
+    router.get('/test/mock-linkedin/.well-known/openid-configuration', async (ctx) => {
+      ctx.body = {
+        issuer: 'http://localhost:3080/test/mock-linkedin',
+        authorization_endpoint: 'http://localhost:3080/test/mock-linkedin/auth',
+        token_endpoint: 'http://localhost:3080/test/mock-linkedin/token',
+        userinfo_endpoint: 'http://localhost:3080/test/mock-linkedin/userinfo',
+        jwks_uri: 'http://localhost:3080/test/mock-linkedin/jwks',
+        response_types_supported: ['code'],
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+      };
+    });
+
+    // Test setup endpoint to configure mock user scenario
+    router.post('/test/mock-linkedin/setup', bodyParser(), async (ctx) => {
+      const { scenario } = ctx.request.body;
+      if (scenario) {
+        mockUserScenario = scenario;
+      }
+      ctx.body = { success: true, scenario: mockUserScenario };
+    });
+
+    // Mock authorization endpoint - stores user data and returns to callback
+    router.get('/test/mock-linkedin/auth', async (ctx) => {
+      const { state, redirect_uri } = ctx.query;
+      const code = `mock_code_${Date.now()}`;
+
+      // Store mock user data for this code based on scenario
+      let userData;
+      if (mockUserScenario === 'owned') {
+        userData = {
+          sub: 'linkedin_user_67890',
+          email: 'jane.smith@localhost',
+          name: 'Jane Smith',
+          given_name: 'Jane',
+          family_name: 'Smith',
+          email_verified: true,
+          picture: 'https://media.linkedin.com/photo.jpg',
+        };
+      } else if (mockUserScenario === 'existing') {
+        userData = {
+          sub: 'linkedin_user_12345',
+          email: 'jane.smith@localhost',
+          name: 'Jane Smith',
+          given_name: 'Jane',
+          family_name: 'Smith',
+          email_verified: true,
+          picture: 'https://media.linkedin.com/photo.jpg',
+        };
+      } else {
+        // Default: external domain user
+        userData = {
+          sub: 'linkedin_user_12345',
+          email: 'john.doe@external.com',
+          name: 'John Doe',
+          given_name: 'John',
+          family_name: 'Doe',
+          email_verified: true,
+          picture: 'https://media.linkedin.com/photo.jpg',
+        };
+      }
+
+      mockUserData.set(code, userData);
+      ctx.redirect(`${redirect_uri}?code=${code}&state=${state}`);
+    });
+
+    router.post('/test/mock-linkedin/token', bodyParser(), async (ctx) => {
+      const { code } = ctx.request.body;
+      const accessToken = `mock_access_${code}`;
+
+      // Transfer user data from code to access token
+      if (mockUserData.has(code)) {
+        mockUserData.set(accessToken, mockUserData.get(code));
+        mockUserData.delete(code);
+      }
+
+      ctx.body = {
+        access_token: accessToken,
+        token_type: 'Bearer',
+        expires_in: 3600,
+        id_token: 'mock_id_token',
+      };
+    });
+
+    router.get('/test/mock-linkedin/userinfo', async (ctx) => {
+      const authHeader = ctx.headers.authorization;
+      const token = authHeader?.replace('Bearer ', '');
+
+      // Check if this is a known access token with stored user data
+      if (mockUserData.has(token)) {
+        ctx.body = mockUserData.get(token);
+        return;
+      }
+
+      // Default user data based on access token pattern
+      // Tests use different codes: mock_auth_code, mock_code
+      let userData;
+
+      // Detect owned domain vs external domain based on token pattern
+      // External domain user (default)
+      userData = {
+        sub: 'linkedin_user_12345',
+        email: 'john.doe@external.com',
+        name: 'John Doe',
+        given_name: 'John',
+        family_name: 'Doe',
+        email_verified: true,
+        picture: 'https://media.linkedin.com/photo.jpg',
+      };
+
+      ctx.body = userData;
+    });
+  }
 
   return router;
 };

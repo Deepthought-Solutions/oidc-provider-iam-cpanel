@@ -149,10 +149,19 @@ export async function initializeClient(provider, callbackUrl) {
   try {
     if (provider.type === 'oidc' && provider.discovery_url) {
       // OIDC with discovery
+      const options = {};
+
+      // Allow HTTP in test/development environments
+      if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+        options.execute = [oidc.allowInsecureRequests];
+      }
+
       const issuer = await oidc.discovery(
         new URL(provider.discovery_url),
         provider.client_id,
-        provider.client_secret
+        provider.client_secret,
+        undefined, // clientAuthentication
+        options
       );
 
       const client = {

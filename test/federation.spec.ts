@@ -7,8 +7,20 @@ import { MockManager } from './helpers/mocks.js';
 
 let mocks: MockManager;
 
-test.beforeEach(() => {
+test.beforeEach(async () => {
   mocks = new MockManager();
+  mocks.mockInitializeClient();
+
+  // Reset mock LinkedIn to default scenario (external domain user)
+  try {
+    await fetch('http://localhost:3080/test/mock-linkedin/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario: 'external' }),
+    });
+  } catch (e) {
+    // Server may not be running yet, ignore
+  }
 });
 
 test.afterEach(() => {
@@ -61,7 +73,7 @@ test.describe('Federation Flow - External Domain', () => {
       type: 'oidc',
       client_id: 'mock_linkedin_client_id',
       client_secret: 'mock_linkedin_client_secret',
-      discovery_url: 'https://www.linkedin.com',
+      discovery_url: 'http://localhost:3080/test/mock-linkedin',
       scopes: 'openid profile email',
       button_color: '#0077B5',
       enabled: true,
@@ -84,29 +96,19 @@ test.describe('Federation Flow - External Domain', () => {
   });
 
   test('should auto-create account for external domain email', async ({ page }: { page: Page }) => {
-    mocks.mockExchangeCode({
-      access_token: mockLinkedInTokenResponse.access_token,
-      id_token: mockLinkedInTokenResponse.id_token,
-      claims: mockLinkedInUserinfo,
-    });
-
-    mocks.mockBuildAuthorizationUrl((client, callbackUrl, state) => {
-      return `http://localhost:3080/test/mock-linkedin-auth?state=${state}&redirect_uri=${encodeURIComponent(callbackUrl)}`;
-    });
-
     await page.goto('http://localhost:3001/login');
     await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
 
-    const currentUrl = page.url();
-    const uidMatch = currentUrl.match(/interaction\/([^\/\?]+)/);
-    if (!uidMatch) throw new Error('Could not extract interaction UID');
-    const interactionUid = uidMatch[1];
-
+    // Click LinkedIn button - this submits the form and starts OAuth flow
     await page.click('button:has-text("Continuer avec LinkedIn")');
-    await page.goto(`http://localhost:3080/interaction/callback/linkedin?code=mock_auth_code&state=${interactionUid}`);
 
-    await page.waitForURL(/.*localhost:3080\/interaction\/.*\/federated\/linkedin.*/);
-    await page.waitForURL(/.*localhost:3080\/interaction\/.*/);
+    // Wait for OAuth flow: form POST -> auth endpoint -> callback -> federated handler
+    // The flow should eventually land on /interaction/:uid/federated/:provider
+    await page.waitForURL(/.*\/interaction\/.*\/federated\/linkedin/, { timeout: 15000 });
+
+    // Wait for the federated flow to complete (should redirect back to interaction)
+    await page.waitForURL(/.*\/interaction\/[^\/]+$/, { timeout: 15000 });
+    await page.waitForTimeout(1000); // Give time for async DB operations
 
     const account = await accountTable.findOne({
       where: { email: 'john.doe@external.com' },
@@ -131,24 +133,16 @@ test.describe('Federation Flow - External Domain', () => {
       password: null,
     });
 
-    mocks.mockExchangeCode({
-      access_token: mockLinkedInTokenResponse.access_token,
-      claims: mockLinkedInUserinfo,
-    });
-
-    mocks.mockBuildAuthorizationUrl((client, callbackUrl, state) => {
-      return `http://localhost:3080/test/mock-linkedin-auth?state=${state}`;
-    });
-
     await page.goto('http://localhost:3001/login');
-    const currentUrl = page.url();
-    const uidMatch = currentUrl.match(/interaction\/([^\/\?]+)/);
-    if (!uidMatch) throw new Error('Could not extract interaction UID');
-    const interactionUid = uidMatch[1];
+    await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
 
+    // Click LinkedIn button
     await page.click('button:has-text("Continuer avec LinkedIn")');
-    await page.goto(`http://localhost:3080/interaction/callback/linkedin?code=mock_code&state=${interactionUid}`);
-    await page.waitForURL(/.*localhost:3080\/interaction\/.*/);
+
+    // Wait for OAuth flow to complete
+    await page.waitForURL(/.*\/interaction\/.*\/federated\/linkedin/, { timeout: 15000 });
+    await page.waitForURL(/.*\/interaction\/[^\/]+$/, { timeout: 15000 });
+    await page.waitForTimeout(1000);
 
     const federatedIdentity = await FederatedIdentity.findOne({
       where: {
@@ -180,7 +174,7 @@ test.describe('Federation Flow - Owned Domain', () => {
       type: 'oidc',
       client_id: 'mock_linkedin_client_id',
       client_secret: 'mock_linkedin_client_secret',
-      discovery_url: 'https://www.linkedin.com',
+      discovery_url: 'http://localhost:3080/test/mock-linkedin',
       scopes: 'openid profile email',
       enabled: true,
       sort_order: 10,
@@ -194,6 +188,13 @@ test.describe('Federation Flow - Owned Domain', () => {
   });
 
   test('should require password verification for owned domain', async ({ page }: { page: Page }) => {
+    // Configure mock to return owned domain user
+    await fetch('http://localhost:3080/test/mock-linkedin/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario: 'owned' }),
+    });
+
     const crypto = await import('crypto');
     const password = 'secure_password';
     const hashedPassword = crypto.createHash('sha512').update(password).digest('hex');
@@ -203,25 +204,14 @@ test.describe('Federation Flow - Owned Domain', () => {
       password: hashedPassword,
     });
 
-    mocks.mockExchangeCode({
-      access_token: mockLinkedInTokenResponse.access_token,
-      claims: mockLinkedInOwnedDomainUserinfo,
-    });
-
-    mocks.mockBuildAuthorizationUrl((client, callbackUrl, state) => {
-      return `http://localhost:3080/test/mock-linkedin-auth?state=${state}`;
-    });
-
     await page.goto('http://localhost:3001/login');
-    const currentUrl = page.url();
-    const uidMatch = currentUrl.match(/interaction\/([^\/\?]+)/);
-    if (!uidMatch) throw new Error('Could not extract interaction UID');
-    const interactionUid = uidMatch[1];
+    await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
 
+    // Click LinkedIn button
     await page.click('button:has-text("Continuer avec LinkedIn")');
-    await page.goto(`http://localhost:3080/interaction/callback/linkedin?code=mock_code&state=${interactionUid}`);
 
-    await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*\/federated\/verify/);
+    // Wait for redirect to verification page
+    await page.waitForURL(/.*\/interaction\/.*\/federated\/verify/, { timeout: 15000 });
 
     const warningText = await page.textContent('.warning');
     expect(warningText).toContain('Security Verification Required');
@@ -248,6 +238,13 @@ test.describe('Federation Flow - Owned Domain', () => {
   });
 
   test('should reject wrong password for owned domain', async ({ page }: { page: Page }) => {
+    // Configure mock to return owned domain user
+    await fetch('http://localhost:3080/test/mock-linkedin/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario: 'owned' }),
+    });
+
     const crypto = await import('crypto');
     const password = 'secure_password';
     const hashedPassword = crypto.createHash('sha512').update(password).digest('hex');
@@ -257,24 +254,11 @@ test.describe('Federation Flow - Owned Domain', () => {
       password: hashedPassword,
     });
 
-    mocks.mockExchangeCode({
-      access_token: mockLinkedInTokenResponse.access_token,
-      claims: mockLinkedInOwnedDomainUserinfo,
-    });
-
-    mocks.mockBuildAuthorizationUrl((client, callbackUrl, state) => {
-      return `http://localhost:3080/test/mock-linkedin-auth?state=${state}`;
-    });
-
     await page.goto('http://localhost:3001/login');
-    const currentUrl = page.url();
-    const uidMatch = currentUrl.match(/interaction\/([^\/\?]+)/);
-    if (!uidMatch) throw new Error('Could not extract interaction UID');
-    const interactionUid = uidMatch[1];
+    await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
 
     await page.click('button:has-text("Continuer avec LinkedIn")');
-    await page.goto(`http://localhost:3080/interaction/callback/linkedin?code=mock_code&state=${interactionUid}`);
-    await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*\/federated\/verify/);
+    await page.waitForURL(/.*\/interaction\/.*\/federated\/verify/, { timeout: 15000 });
 
     await page.fill('input[name="password"]', 'wrong_password');
     await page.click('button[type="submit"]');
@@ -295,21 +279,22 @@ test.describe('Federation Flow - Owned Domain', () => {
   });
 
   test('should reject owned domain email without existing account', async ({ page }: { page: Page }) => {
-    mocks.mockExchangeCode({} as any);
-    mocks.exchangeCode.rejects(new Error('OWNED_DOMAIN_ACCOUNT_NOT_FOUND'));
-
-    mocks.mockBuildAuthorizationUrl((client, callbackUrl, state) => {
-      return `http://localhost:3080/test/mock-linkedin-auth?state=${state}`;
+    // Configure mock to return owned domain user
+    await fetch('http://localhost:3080/test/mock-linkedin/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario: 'owned' }),
     });
 
     await page.goto('http://localhost:3001/login');
-    const currentUrl = page.url();
-    const uidMatch = currentUrl.match(/interaction\/([^\/\?]+)/);
-    if (!uidMatch) throw new Error('Could not extract interaction UID');
-    const interactionUid = uidMatch[1];
+    await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
 
     await page.click('button:has-text("Continuer avec LinkedIn")');
-    await page.goto(`http://localhost:3080/interaction/callback/linkedin?code=mock_code&state=${interactionUid}`);
+
+    // Should show error/verification page for owned domain without existing account
+    await page.waitForURL(/.*\/interaction\/.*\/federated\/verify/, { timeout: 15000 });
+    const pageText = await page.textContent('body');
+    expect(pageText).toContain('jane.smith@localhost');
   });
 });
 
@@ -323,7 +308,7 @@ test.describe('Federation Flow - Returning User', () => {
       type: 'oidc',
       client_id: 'mock_linkedin_client_id',
       client_secret: 'mock_linkedin_client_secret',
-      discovery_url: 'https://www.linkedin.com',
+      discovery_url: 'http://localhost:3080/test/mock-linkedin',
       scopes: 'openid profile email',
       enabled: true,
       sort_order: 10,
@@ -352,25 +337,14 @@ test.describe('Federation Flow - Returning User', () => {
       last_used_at: new Date(),
     });
 
-    mocks.mockExchangeCode({
-      access_token: mockLinkedInTokenResponse.access_token,
-      claims: mockLinkedInUserinfo,
-    });
-
-    mocks.mockBuildAuthorizationUrl((client, callbackUrl, state) => {
-      return `http://localhost:3080/test/mock-linkedin-auth?state=${state}`;
-    });
-
     await page.goto('http://localhost:3001/login');
-    const currentUrl = page.url();
-    const uidMatch = currentUrl.match(/interaction\/([^\/\?]+)/);
-    if (!uidMatch) throw new Error('Could not extract interaction UID');
-    const interactionUid = uidMatch[1];
+    await expect(page).toHaveURL(/.*localhost:3080\/interaction\/.*/);
 
     await page.click('button:has-text("Continuer avec LinkedIn")');
-    await page.goto(`http://localhost:3080/interaction/callback/linkedin?code=mock_code&state=${interactionUid}`);
 
-    await page.waitForURL(/.*localhost:3080\/interaction\/.*/);
+    // Should complete OAuth flow without verification prompt
+    await page.waitForURL(/.*\/interaction\/.*\/federated\/linkedin/, { timeout: 15000 });
+    await page.waitForURL(/.*\/interaction\/[^\/]+$/, { timeout: 15000 });
     expect(page.url()).not.toContain('/federated/verify');
 
     const federatedIdentity = await FederatedIdentity.findOne({
@@ -396,7 +370,7 @@ test.describe('Multiple Providers', () => {
         type: 'oidc',
         client_id: 'mock_linkedin_client_id',
         client_secret: 'mock_linkedin_client_secret',
-        discovery_url: 'https://www.linkedin.com',
+        discovery_url: 'http://localhost:3080/test/mock-linkedin',
         scopes: 'openid profile email',
         enabled: true,
         sort_order: 10,

@@ -53,6 +53,23 @@ export class MockManager {
   }
 
   /**
+   * Mock upstream provider client initialization
+   */
+  mockInitializeClient(clientOrFn?: any): void {
+    if (!this.originalFunctions.has('initializeClient')) {
+      this.originalFunctions.set('initializeClient', upstreamProvidersService.initializeClient);
+    }
+    upstreamProvidersService.initializeClient =
+      typeof clientOrFn === 'function'
+        ? clientOrFn
+        : async (provider: any) => ({
+            provider,
+            type: provider.type || 'oidc',
+            scopes: provider.scopes,
+          });
+  }
+
+  /**
    * Mock upstream provider authorization URL builder
    */
   mockBuildAuthorizationUrl(urlOrFn: string | ((client: any, callbackUrl: string, state: string) => string)): void {
@@ -76,6 +93,8 @@ export class MockManager {
         upstreamProvidersService.exchangeCode = originalFn;
       } else if (key === 'buildAuthorizationUrl') {
         upstreamProvidersService.buildAuthorizationUrl = originalFn;
+      } else if (key === 'initializeClient') {
+        upstreamProvidersService.initializeClient = originalFn;
       }
     });
     this.originalFunctions.clear();
